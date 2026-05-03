@@ -1,0 +1,52 @@
+from .base import make_header_config
+
+ORE_GEOLOGY_HEADERS = make_header_config(
+    required=[
+        "iup_code",
+        "date_production",
+        "shift",
+        "prospect_area",
+        "material",
+        "unit_truck",
+        "stockpile",
+        "pile_id",
+        "batch_code",
+        "ritase",
+        "tonnage",
+        "ore_class"
+    ],
+    allowed=[
+        "iup_code",
+        "date_production",
+        "shift",
+        "category",
+        "prospect_area",
+        "mine_block",
+        "from",
+        "to",
+        "material",
+        "ore_class",
+        "ni_grade",
+        "grade_control",
+        "unit_truck",
+        "stockpile",
+        "pile_id",
+        "batch_code",
+        "incerment",
+        "batch_status",
+        "ritase",
+        "tonnage",
+        "pile_status",
+        "remarks",
+        "truck_factors"
+    ],
+    aliases={
+        "iup": "iup_code",
+        "iup_code": "iup_code",
+        "date": "date_production",
+        "loading_point": "prospect_area",
+        "source": "prospect_area",
+        "dumping": "stockpile",
+        "dome": "pile_id"
+    },
+)

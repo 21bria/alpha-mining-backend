@@ -1,0 +1,513 @@
+# views.py
+import logging
+from django.http import JsonResponse
+from django.db import connection, DatabaseError
+import calendar
+from datetime import datetime, timedelta
+from analytics.services.iup_filter import build_iup_clause
+logger = logging.getLogger(__name__)
+
+
+def to_float1(v):
+    return round(float(v or 0), 1)
+
+## Card Summary
+def build_summary_query(where_clause: str) -> str:
+    return f"""
+        SELECT 
+            COALESCE(
+                ROUND(
+                    SUM(CASE WHEN vsd.material IN ('LIM', 'SAP') THEN vsd.tonnage ELSE 0 END)::numeric,
+                    2
+                ),
+                0
+            ) AS total,
+            COALESCE(
+                ROUND(
+                    SUM(CASE WHEN vsd.material = 'LIM' THEN vsd.tonnage ELSE 0 END)::numeric,
+                    2
+                ),
+                0
+            ) AS total_lim,
+            COALESCE(
+                ROUND(
+                    SUM(CASE WHEN vsd.material = 'SAP' THEN vsd.tonnage ELSE 0 END)::numeric,
+                    2
+                ),
+                0
+            ) AS total_sap
+        FROM view_selling_details vsd
+        {where_clause}
+    """
+
+
+def get_barging_summary(request):
+    try:
+        iup_filter  = request.GET.get("iup_id") or request.GET.get("iup_filter")
+        filter_type = request.GET.get("filter_type")
+        year        = request.GET.get("year")
+        month       = request.GET.get("month")
+        week        = request.GET.get("week")
+        date_start  = request.GET.get("date_start")
+        date_end    = request.GET.get("date_end")
+        filter_date = request.GET.get("filter_date")
+
+        where_clause = "WHERE 1=1"
+        params = []
+
+        # pakai alias
+        iup_clause, iup_params = build_iup_clause(iup_filter, "vsd")
+
+        # apply iup filter
+        where_clause += iup_clause
+        params += iup_params
+
+        # filter periode
+        if filter_type == "daily" and filter_date:
+            where_clause += " AND vsd.date_hauling = %s"
+            params += [filter_date]
+
+        elif filter_type == "range" and date_start and date_end:
+            where_clause += " AND vsd.date_hauling BETWEEN %s AND %s"
+            params += [date_start, date_end]
+
+        elif filter_type == "weekly" and week:
+            where_clause += " AND TO_CHAR(vsd.date_hauling, 'IYYY-IW') = %s"
+            params += [week]
+
+        elif filter_type == "monthly" and year and month:
+            where_clause += """
+                AND EXTRACT(YEAR FROM vsd.date_hauling) = %s
+                AND EXTRACT(MONTH FROM vsd.date_hauling) = %s
+            """
+            params += [year, month]
+
+        elif filter_type == "yearly" and year:
+            where_clause += " AND EXTRACT(YEAR FROM vsd.date_hauling) = %s"
+            params += [year]
+
+        elif filter_type == "all" or not filter_type:
+            pass
+
+        else:
+            return JsonResponse({"error": "Invalid filter type"}, status=400)
+
+        query = build_summary_query(where_clause)
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+        return JsonResponse({
+            "total_ore": to_float1(row[0]),
+            "total_lim": to_float1(row[1]),
+            "total_sap": to_float1(row[2]),
+        })
+
+    except DatabaseError:
+        logger.exception("Database query failed.")
+        return JsonResponse({"error": "Database error"}, status=500)
+
+    except Exception as e:
+        logger.exception("Unexpected error in get_barging_summary_group")
+        return JsonResponse({"error": str(e)}, status=500)
+    
+# Create Chart Barging
+def get_chart_barging(request):
+    try:
+        iup_filter  = request.GET.get("iup_id") or request.GET.get("iup_filter")
+        filter_type = request.GET.get("filter_type")
+        year        = request.GET.get("year")
+        month       = request.GET.get("month")
+        week        = request.GET.get("week")
+        date_start  = request.GET.get("date_start")
+        date_end    = request.GET.get("date_end")
+        filter_date = request.GET.get("filter_date")
+
+        iup_clause_s, iup_params_s = build_iup_clause(iup_filter, "s")
+
+        details = []
+
+        if filter_type == "daily" and filter_date:
+            query = f"""
+                WITH working_hours AS (
+                    SELECT
+                        hour_label,
+                        CASE
+                            WHEN hour_label >= 7 THEN hour_label
+                            ELSE hour_label + 24
+                        END AS sort_order
+                    FROM generate_series(0, 23) AS hour_label
+                ),
+                actual AS (
+                    SELECT
+                        EXTRACT(HOUR FROM s.time_hauling)::int AS hour_label,
+                        SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END) AS actual_lim,
+                        SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END) AS actual_sap,
+                        SUM(s.tonnage) AS actual_total
+                    FROM selling_barging s
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling::date = %s::date
+                    {iup_clause_s}
+                    GROUP BY EXTRACT(HOUR FROM s.time_hauling)
+                ),
+                detail AS (
+                    SELECT
+                        EXTRACT(HOUR FROM s.time_hauling)::int AS hour_label,
+                        mb.barge_code,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling::date = %s::date
+                    {iup_clause_s}
+                    GROUP BY EXTRACT(HOUR FROM s.time_hauling), mb.barge_code
+                )
+                SELECT
+                    wh.hour_label AS label,
+                    ROUND(COALESCE(a.actual_total, 0), 2) AS actual_total,
+                    ROUND(COALESCE(a.actual_lim, 0), 2) AS actual_lim,
+                    ROUND(COALESCE(a.actual_sap, 0), 2) AS actual_sap,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'barge_code', d.barge_code,
+                                'total', d.total,
+                                'lim', d.lim,
+                                'sap', d.sap
+                            )
+                            ORDER BY d.barge_code
+                        ) FILTER (WHERE d.barge_code IS NOT NULL),
+                        '[]'::json
+                    ) AS summary_by_barge
+                FROM working_hours wh
+                LEFT JOIN actual a ON a.hour_label = wh.hour_label
+                LEFT JOIN detail d ON d.hour_label = wh.hour_label
+                GROUP BY wh.hour_label, wh.sort_order, a.actual_total, a.actual_lim, a.actual_sap
+                ORDER BY wh.sort_order;
+            """
+            params = [filter_date] + iup_params_s + [filter_date] + iup_params_s
+
+        elif filter_type == "range" and date_start and date_end:
+            query = f"""
+                WITH tanggal AS (
+                    SELECT generate_series(%s::date, %s::date, interval '1 day') AS date
+                ),
+                actual AS (
+                    SELECT
+                        s.date_hauling::date AS date,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total
+                    FROM selling_barging s
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling BETWEEN %s AND %s
+                    {iup_clause_s}
+                    GROUP BY s.date_hauling::date
+                ),
+                detail AS (
+                    SELECT
+                        s.date_hauling::date AS date,
+                        mb.barge_code,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling BETWEEN %s AND %s
+                    {iup_clause_s}
+                    GROUP BY s.date_hauling::date, mb.barge_code
+                )
+                SELECT
+                    TO_CHAR(tanggal.date, 'YYYY-MM-DD') AS label,
+                    ROUND(COALESCE(a.total, 0), 2) AS actual_total,
+                    ROUND(COALESCE(a.lim, 0), 2) AS actual_lim,
+                    ROUND(COALESCE(a.sap, 0), 2) AS actual_sap,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'barge_code', d.barge_code,
+                                'total', d.total,
+                                'lim', d.lim,
+                                'sap', d.sap
+                            )
+                            ORDER BY d.barge_code
+                        ) FILTER (WHERE d.barge_code IS NOT NULL),
+                        '[]'::json
+                    ) AS summary_by_barge
+                FROM tanggal
+                LEFT JOIN actual a ON tanggal.date = a.date
+                LEFT JOIN detail d ON tanggal.date = d.date
+                GROUP BY tanggal.date, a.total, a.lim, a.sap
+                ORDER BY tanggal.date;
+            """
+            params = [date_start, date_end, date_start, date_end] + iup_params_s + [date_start, date_end] + iup_params_s
+
+        elif filter_type == "weekly" and year and month and week:
+            try:
+                if "-" in str(week):
+                    year_str, week_str = str(week).split("-")
+                    year = int(year_str)
+                    week = int(week_str)
+                    start_date = datetime.strptime(f"{year}-W{week:02}-1", "%G-W%V-%u")
+                    end_date = start_date + timedelta(days=6)
+                else:
+                    year = int(year)
+                    month = int(month)
+                    week = int(week)
+
+                    if not (1 <= month <= 12):
+                        return JsonResponse({"error": "Bulan tidak valid (1–12)"}, status=400)
+                    if not (1 <= week <= 5):
+                        return JsonResponse({"error": "Minggu tidak valid (1–5)"}, status=400)
+
+                    first_day = datetime(year, month, 1)
+                    start_date = first_day + timedelta(days=(week - 1) * 7)
+                    end_date = start_date + timedelta(days=6)
+
+                    if end_date.month != month:
+                        next_month = datetime(year, month, 28) + timedelta(days=4)
+                        end_date = datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
+
+            except Exception as e:
+                return JsonResponse({"error": f"Format tahun/bulan/minggu tidak valid: {str(e)}"}, status=400)
+
+            start_str = start_date.strftime("%Y-%m-%d")
+            end_str = end_date.strftime("%Y-%m-%d")
+
+            query = f"""
+                WITH tanggal AS (
+                    SELECT generate_series(%s::date, %s::date, interval '1 day') AS date
+                ),
+                actual AS (
+                    SELECT
+                        s.date_hauling::date AS date,
+                        SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END) AS lim,
+                        SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END) AS sap,
+                        SUM(s.tonnage) AS total
+                    FROM selling_barging s
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling BETWEEN %s AND %s
+                    {iup_clause_s}
+                    GROUP BY s.date_hauling::date
+                ),
+                combine AS (
+                    SELECT
+                        t.date,
+                        TO_CHAR(t.date, 'FMDay') AS day_name,
+                        COALESCE(a.lim, 0) AS lim,
+                        COALESCE(a.sap, 0) AS sap,
+                        COALESCE(a.total, 0) AS total
+                    FROM tanggal t
+                    LEFT JOIN actual a ON t.date = a.date
+                ),
+                detail AS (
+                    SELECT
+                        s.date_hauling::date AS date,
+                        TO_CHAR(s.date_hauling, 'FMDay') AS day_name,
+                        mb.barge_code,
+                        SUM(s.tonnage) AS total,
+                        SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END) AS lim,
+                        SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling BETWEEN %s AND %s
+                    {iup_clause_s}
+                    GROUP BY s.date_hauling::date, TO_CHAR(s.date_hauling, 'FMDay'), mb.barge_code
+                )
+                SELECT
+                    c.day_name AS label,
+                    ROUND(SUM(c.total)::numeric, 2) AS actual_total,
+                    ROUND(SUM(c.lim)::numeric, 2) AS actual_lim,
+                    ROUND(SUM(c.sap)::numeric, 2) AS actual_sap,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'barge_code', d.barge_code,
+                                'total', d.total,
+                                'lim', d.lim,
+                                'sap', d.sap
+                            )
+                            ORDER BY d.barge_code
+                        ) FILTER (WHERE d.barge_code IS NOT NULL),
+                        '[]'::json
+                    ) AS summary_by_barge
+                FROM combine c
+                LEFT JOIN detail d ON c.date = d.date
+                GROUP BY c.day_name
+                ORDER BY ARRAY_POSITION(
+                    ARRAY['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+                    c.day_name
+                );
+            """
+            params = [start_str, end_str, start_str, end_str] + iup_params_s + [start_str, end_str] + iup_params_s
+
+        elif filter_type == "monthly" and year and month:
+            year = int(year)
+            month = int(month)
+            last_day = calendar.monthrange(year, month)[1]
+            tgl_pertama = datetime(year, month, 1).date()
+            tgl_terakhir = datetime(year, month, last_day).date()
+
+            query = f"""
+                WITH tanggal AS (
+                    SELECT generate_series(%s::date, %s::date, interval '1 day') AS date
+                ),
+                detail AS (
+                    SELECT
+                        s.date_hauling::date AS date,
+                        mb.barge_code,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.date_hauling BETWEEN %s AND %s
+                    {iup_clause_s}
+                    GROUP BY s.date_hauling::date, mb.barge_code
+                )
+                SELECT
+                    TO_CHAR(t.date, 'DD') AS label,
+                    ROUND(COALESCE(SUM(d.total), 0), 2) AS actual_total,
+                    ROUND(COALESCE(SUM(d.lim), 0), 2) AS actual_lim,
+                    ROUND(COALESCE(SUM(d.sap), 0), 2) AS actual_sap,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'barge_code', d.barge_code,
+                                'total', d.total,
+                                'lim', d.lim,
+                                'sap', d.sap
+                            )
+                            ORDER BY d.barge_code
+                        ) FILTER (WHERE d.barge_code IS NOT NULL),
+                        '[]'::json
+                    ) AS summary_by_barge
+                FROM tanggal t
+                LEFT JOIN detail d ON t.date = d.date
+                GROUP BY t.date
+                ORDER BY t.date;
+            """
+            params = [tgl_pertama, tgl_terakhir, tgl_pertama, tgl_terakhir] + iup_params_s
+
+        elif filter_type == "yearly" and year:
+            query = f"""
+                WITH bulan AS (
+                    SELECT generate_series(1, 12) AS month
+                ),
+                detail AS (
+                    SELECT
+                        EXTRACT(MONTH FROM s.date_hauling)::int AS month,
+                        mb.barge_code,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE EXTRACT(YEAR FROM s.date_hauling) = %s
+                    {iup_clause_s}
+                    GROUP BY EXTRACT(MONTH FROM s.date_hauling), mb.barge_code
+                )
+                SELECT
+                    TO_CHAR(TO_DATE(bulan.month::text, 'MM'), 'Mon') AS label,
+                    ROUND(COALESCE(SUM(d.total), 0), 2) AS actual_total,
+                    ROUND(COALESCE(SUM(d.lim), 0), 2) AS actual_lim,
+                    ROUND(COALESCE(SUM(d.sap), 0), 2) AS actual_sap,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'barge_code', d.barge_code,
+                                'total', d.total,
+                                'lim', d.lim,
+                                'sap', d.sap
+                            )
+                            ORDER BY d.barge_code
+                        ) FILTER (WHERE d.barge_code IS NOT NULL),
+                        '[]'::json
+                    ) AS summary_by_barge
+                FROM bulan
+                LEFT JOIN detail d ON bulan.month = d.month
+                GROUP BY bulan.month
+                ORDER BY bulan.month;
+            """
+            params = [year] + iup_params_s
+
+        elif filter_type == "all":
+            query = f"""
+                WITH tahun AS (
+                    SELECT DISTINCT EXTRACT(YEAR FROM s.date_hauling)::int AS year
+                    FROM selling_barging s
+                    WHERE s.status_barging = 'Complete'
+                    {iup_clause_s}
+                ),
+                actual AS (
+                    SELECT
+                        EXTRACT(YEAR FROM s.date_hauling)::int AS year,
+                        mb.barge_code,
+                        ROUND(SUM(s.tonnage)::numeric, 2) AS total,
+                        ROUND(SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END)::numeric, 2) AS lim,
+                        ROUND(SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END)::numeric, 2) AS sap
+                    FROM selling_barging s
+                    LEFT JOIN master_barge mb ON mb.id = s.barge_code
+                    LEFT JOIN master_materials m ON m.id = s.id_material
+                    WHERE s.status_barging = 'Complete'
+                    {iup_clause_s}
+                    GROUP BY EXTRACT(YEAR FROM s.date_hauling), mb.barge_code
+                )
+                SELECT
+                    t.year::text AS label,
+                    ROUND(COALESCE(SUM(a.total), 0)::numeric, 2) AS actual_total,
+                    ROUND(COALESCE(SUM(a.lim), 0)::numeric, 2) AS actual_lim,
+                    ROUND(COALESCE(SUM(a.sap), 0)::numeric, 2) AS actual_sap,
+                    '[]'::json AS summary_by_barge
+                FROM tahun t
+                LEFT JOIN actual a ON t.year = a.year
+                GROUP BY t.year
+                ORDER BY t.year;
+            """
+            params = iup_params_s + iup_params_s
+
+        else:
+            return JsonResponse({'error': 'Invalid or incomplete filter parameters'}, status=400)
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+        for row in results:
+            label        = str(row[0])
+            total_actual = float(row[1] or 0)
+            lim_value    = float(row[2] or 0)
+            sap_value    = float(row[3] or 0)
+            barges       = row[4] if row[4] else []
+
+            details.append({
+                'label': label,
+                'total_actual': round(total_actual, 2),
+                'lim_actual': round(lim_value, 2),
+                'sap_actual': round(sap_value, 2),
+                'barges': barges
+            })
+
+        return JsonResponse({
+            'summary': {
+                'x_data': [d['label'] for d in details],
+                'y_data_actual': [d['total_actual'] for d in details],
+                'y_data_lim': [d['lim_actual'] for d in details],
+                'y_data_sap': [d['sap_actual'] for d in details],
+            },
+            'details': details
+        })
+
+    except DatabaseError:
+        logger.exception("DB Error in chart selling")
+        return JsonResponse({'error': 'Database error'}, status=500)
+    except Exception as e:
+        logger.exception("Unexpected error in chart selling")
+        return JsonResponse({'error': str(e)}, status=500)

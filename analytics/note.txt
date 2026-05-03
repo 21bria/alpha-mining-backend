@@ -1,0 +1,31 @@
+
+Productivity:
+==============
+
+Excavator dihitung sebagai fleet jika dia melakukan aktivitas loading ORE
+pada periode tersebut.
+
+Productivity dihitung dari tonase ORE yang dihasilkan di lokasi loading
+dibagi dengan jam kerja efektif excavator di lokasi tersebut.
+
+Productivity = tonase ORE yang di-load ÷ jam kerja excavator (EWH)
+
+Fleet dan productivity dihitung berdasarkan aktivitas excavator
+yang melakukan loading material ORE (limonite dan saprolite)
+pada lokasi dan loading point tertentu.
+
+Productivity dihitung dari total tonase ORE yang dihasilkan
+dibagi dengan jam kerja efektif excavator (EWH) pada lokasi tersebut.
+
+Formula :
+
+Production (tonnage)
+   ↓
+by loader + loading point + material
+
+HM (working hours)
+   ↓
+by loader + location + status = EWH
+
+JOIN:
+loader + tanggal + lokasi 

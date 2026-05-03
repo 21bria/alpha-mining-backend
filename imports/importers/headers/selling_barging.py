@@ -1,0 +1,43 @@
+from .base import make_header_config
+
+SELLING_BARGING_HEADERS = make_header_config(
+    required=[
+        "iup_code",
+        "date_hauling",
+        "material",
+        "code_lot",
+    ],
+    allowed=[
+        "iup_code",
+        "iup_code",
+        "date_barging_in",
+        "date_hauling",
+        "time",
+        "shift",
+        "date_barging_load",
+        "barge_code",
+        "barge_load_loc",
+        "barge_unload_loc",
+        "no_truck",
+        "sale_code",
+        "material",
+        "stockpile",
+        "dome_ori",
+        "buyer",
+        "code_lot",
+        "tonnage",
+        "sub_lot",
+        "group",
+        "adjust_sale",
+        "date_barging_out",
+        "direct",
+        "cek_sub_lot",
+        "",
+        "count_inc",
+        "",
+    ],
+    aliases={
+        "iup": "iup_code",
+        "iup_code": "iup_code",
+    },
+)

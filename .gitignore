@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.env
+venv/
+media/
+staticfiles/
+*.sqlite3
+.DS_Store
+
+# Setting
+settings.py
+
+# Mengabaikan file log besar
+debug.log.env
+
+celery.txt
+migrate.txt

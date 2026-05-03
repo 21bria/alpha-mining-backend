@@ -1,0 +1,167 @@
+import tempfile
+from django.core.files import File
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from django.db.models import Q
+
+from master.models import MineUnits, UnitAssignment, unitsCategories
+from analytics.export_registry import register_exporter
+
+
+def _safe_str(value):
+    return "" if value is None else str(value)
+
+
+def _get_category_map():
+    return {
+        row.id: (row.category or "")
+        for row in unitsCategories.objects.all().only("id", "category")
+    }
+
+
+def _apply_filters(qs, params):
+    iup_id = params.get("iup_id") or params.get("iup")
+    if iup_id not in (None, "", "null", "undefined"):
+        try:
+            qs = qs.filter(assignments__iup_id=int(iup_id), assignments__active=True)
+        except (TypeError, ValueError):
+            pass
+
+    search = params.get("search")
+    if search not in (None, "", "null", "undefined"):
+        qs = qs.filter(
+            Q(unit_vendor__icontains=search) |
+            Q(unit_code__icontains=search) |
+            Q(unit_model__icontains=search) |
+            Q(unit_class__icontains=search) |
+            Q(brand__icontains=search) |
+            Q(supports__icontains=search) |
+            Q(description__icontains=search)
+        )
+
+    ordering = params.get("ordering")
+    allowed_ordering = {
+        "id", "-id",
+        "unit_vendor", "-unit_vendor",
+        "unit_code", "-unit_code",
+        "unit_model", "-unit_model",
+        "unit_class", "-unit_class",
+        "created_at", "-created_at",
+    }
+
+    if ordering in allowed_ordering:
+        qs = qs.order_by(ordering)
+    else:
+        qs = qs.order_by("unit_vendor", "unit_code")
+
+    return qs.distinct()
+
+
+@register_exporter("master.units")
+def export_master_units(job):
+    qs = MineUnits.objects.select_related("user").prefetch_related("assignments__iup").all()
+    qs = _apply_filters(qs, job.params or {})
+
+    category_map = _get_category_map()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Master Units"
+
+    headers = [
+        "ID",
+        "IUP ID",
+        "IUP Code",
+        "IUP Name",
+        "Unit Vendor",
+        "Unit Code",
+        "Unit Model",
+        "Unit Class",
+        "Brand",
+        "Category ID",
+        "Category",
+        "Vendor ID",
+        "Supports",
+        "Status",
+        "Description",
+        "Commisioning Date",
+        "On Hire",
+        "Off Hire",
+        "Username",
+        "Created At",
+        "Updated At",
+    ]
+
+    ws.append(headers)
+
+    for col in ws[1]:
+        col.font = Font(bold=True)
+
+    for row in qs.iterator(chunk_size=2000):
+        active_assignment = None
+        for a in row.assignments.all():
+            if a.active:
+                active_assignment = a
+                break
+
+        iup_id = active_assignment.iup_id if active_assignment else ""
+        iup_code = active_assignment.iup.iup_code if active_assignment and active_assignment.iup else ""
+        iup_name = active_assignment.iup.iup_name if active_assignment and active_assignment.iup else ""
+
+        ws.append([
+            row.id,
+            iup_id,
+            iup_code or "",
+            iup_name or "",
+            row.unit_vendor or "",
+            row.unit_code or "",
+            row.unit_model or "",
+            row.unit_class or "",
+            row.brand or "",
+            row.id_category if row.id_category is not None else "",
+            category_map.get(row.id_category, ""),
+            row.id_vendor if row.id_vendor is not None else "",
+            row.supports or "",
+            row.status if row.status is not None else "",
+            row.description or "",
+            row.commisioning_date if row.commisioning_date else None,
+            row.on_hire if row.on_hire else None,
+            row.off_hire if row.off_hire else None,
+            row.user.username if row.user else "",
+            row.created_at if row.created_at else None,
+            row.updated_at if row.updated_at else None,
+        ])
+
+    # format date
+    for row_idx in range(2, ws.max_row + 1):
+        for col_idx in [16, 17, 18]:
+            cell = ws.cell(row=row_idx, column=col_idx)
+            if cell.value:
+                cell.number_format = "YYYY-MM-DD"
+
+    # format datetime
+    for row_idx in range(2, ws.max_row + 1):
+        for col_idx in [20, 21]:
+            cell = ws.cell(row=row_idx, column=col_idx)
+            if cell.value:
+                cell.number_format = "YYYY-MM-DD HH:MM:SS"
+
+    # auto width
+    for column_cells in ws.columns:
+        max_length = 0
+        column_letter = column_cells[0].column_letter
+        for cell in column_cells:
+            try:
+                cell_len = len(str(cell.value or ""))
+                if cell_len > max_length:
+                    max_length = cell_len
+            except Exception:
+                pass
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 30)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    wb.save(tmp.name)
+    tmp.close()
+
+    filename = f"master_units_export_{job.id}.xlsx"
+    return File(open(tmp.name, "rb"), name=filename)
