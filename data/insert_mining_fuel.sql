@@ -20,29 +20,33 @@ INSERT INTO kawi.mining_fuel_consumption (
     user_id
 )
 SELECT
-    COALESCE(s.created_at, now()),
-    COALESCE(s.updated_at, now()),
-    -- CODE UNIQUE
-    'FUEL-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS') || '-' || ROW_NUMBER() OVER (),
-    false,
+    COALESCE(x.created_at, NOW()),
+    COALESCE(x.updated_at, NOW()),
+    'FUEL-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS') || '-' || x.rn,
+    FALSE,
     NULL,
-    -- UUID BARU
     gen_random_uuid(),
-    s."date",
-    s.shift,
-    s.unit,
-    -- HANDLE NUMERIC (kalau varchar)
-    COALESCE(NULLIF(s.hours_metre::text, '')::numeric, 0),
-    s.drivers,
-    s.charging_time,
-    COALESCE(NULLIF(s.volume::text, '')::numeric, 0),
-    s.category,
-    s."storage",
-    s."operator",
-    -- rename remark → description
-    s.remark,
-    -- IUP FIX
+    x."date",
+    x.shift,
+    x.unit,
+    COALESCE(NULLIF(x.hours_metre::text, '')::numeric, 0),
+    x.drivers,
+    x.charging_time,
+    COALESCE(NULLIF(x.volume::text, '')::numeric, 0),
+    x.category,
+    x."storage",
+    x."operator",
+    x.remark,
     1 AS iup_id,
-    -- USER SAFE
     1 AS user_id
-FROM ext_kqms.mine_units_fuel_consumption s;
+FROM (
+    SELECT DISTINCT ON (s."date", s.shift, s.unit)
+        s.*,
+        ROW_NUMBER() OVER () AS rn
+    FROM ext_kqms.mine_units_fuel_consumption s
+    WHERE s."date" IS NOT NULL
+      AND s.shift IS NOT NULL
+      AND s.unit IS NOT NULL
+    ORDER BY s."date", s.shift, s.unit, s.updated_at DESC NULLS LAST, s.created_at DESC NULLS LAST
+) x
+ON CONFLICT (iup_id, "date", shift, unit) DO NOTHING;

@@ -660,8 +660,8 @@ def summary_selling_overview(request):
                 SELECT
                     mb.barge_code,
                     SUM(s.tonnage) AS total_tonnage,
-                    SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END) AS total_lim,
-                    SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END) AS total_sap
+                    ROUND(SUM(CASE WHEN s.sale_adjust = 'HPAL' THEN s.tonnage ELSE 0 END)::numeric, 2) AS total_lim,
+                    ROUND(SUM(CASE WHEN s.sale_adjust = 'RKEF' THEN s.tonnage ELSE 0 END)::numeric, 2) AS total_sap
                 FROM selling_barging s
                 LEFT JOIN master_barge mb ON mb.id = s.barge_code
                 LEFT JOIN master_materials m ON m.id = s.id_material

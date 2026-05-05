@@ -11,22 +11,25 @@ INSERT INTO kawi.master_activity_locations (
     user_id
 )
 SELECT
-    now() AS created_at,
-    now() AS updated_at,
-    s.code,
-    false AS is_deleted,
-    NULL AS deleted_at,
-    s.new_id AS id,
-    s.name,
-    NULL AS description,
-    1 AS iup_id,
-    1 AS user_id
-FROM ext_kqms.v_mine_unit_location_uuid s
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM kawi.master_activity_locations t
-    WHERE t.id = s.new_id
-);
+    NOW(),
+    NOW(),
+    x.code,
+    FALSE,
+    NULL,
+    x.new_id,
+    x.name,
+    NULL,
+    1,
+    1
+FROM (
+    SELECT DISTINCT ON (s.new_id)
+        s.new_id,
+        s.code,
+        s.name
+    FROM ext_kqms.v_mine_unit_location_uuid s
+    ORDER BY s.new_id, s.code, s.name
+) x
+ON CONFLICT (id) DO NOTHING;
 
 -- UPDATE ?
 INSERT INTO kawi.master_activity_locations (

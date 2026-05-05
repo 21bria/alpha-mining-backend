@@ -94,7 +94,7 @@ SELECT
     1 AS iup_id,
     -- USER SAFE
     1 AS user_id
-FROM ext_kqms.ore_selling_barging s
+FROM ext_kqms.ore_sellings_barging s
 
 -- ANTI DUPLICATE TARGET
 -- WHERE NOT EXISTS (

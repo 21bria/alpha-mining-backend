@@ -22,7 +22,6 @@ SELECT
     COALESCE(s.updated_at, now()),
     1 AS user_id
 FROM ext_kqms.master_barge s;
-
 --  ANTI DUPLICATE
 -- WHERE NOT EXISTS (
 --     SELECT 1
