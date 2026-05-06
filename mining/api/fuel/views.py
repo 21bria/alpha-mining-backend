@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from django.http import FileResponse
 from django.conf import settings
 import os
-
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import filters as drf_filters
 from django_filters.rest_framework import DjangoFilterBackend
@@ -149,19 +149,26 @@ class FuelConsumptionViewCRUDSet(BaseViewSet):
             {"status": "export queued", "job_id": str(job.id)},
             status=202
         )
+
+    @action(detail=False, methods=["get"], url_path="download-template")
     def download_template(self, request):
         file_path = os.path.join(
             settings.BASE_DIR,
-            "master",
-            "import_templates",
-            "mining_fuel_transpose_import_template.xlsx",
+            "imports",
+            "templates",
+            "geology_ore_import_template.xlsx",
         )
 
         if not os.path.exists(file_path):
-            return Response({"detail": "Template file not found"}, status=404)
+            return Response(
+                {"detail": f"Template file not found: {file_path}"},
+                status=404,
+            )
 
         return FileResponse(
             open(file_path, "rb"),
             as_attachment=True,
-            filename="mining_fuel_transpose_import_template.xlsx",
+            filename="geology_ore_import_template.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+  

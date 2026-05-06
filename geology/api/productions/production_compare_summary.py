@@ -10,6 +10,7 @@ from geology.models import OreProductionsView, DetailsRoa, DetailsMral
 from geology.services.production_summary import apply_common_filters, sum_tonnage
 
 class ProductionCompareSummaryView(APIView):
+    queryset = OreProductionsView.objects.all()
     permission_classes = [
         IsAuthenticated,
         GlobalMasterPermission,

@@ -10,6 +10,7 @@ from mining.models import mineProductionsView
 from mining.services.production_summary import apply_common_filters, sum_tonnage
 
 class CompareSummaryView(APIView):
+    queryset = mineProductionsView.objects.all()
     permission_classes = [
         IsAuthenticated,
         GlobalMasterPermission,

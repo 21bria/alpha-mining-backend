@@ -96,6 +96,7 @@ class ProductionsViewSet(BaseViewSet):
         return qs
     
 class ProductionsViewCRUDSet(BaseViewSet):
+    queryset = OreProductions.objects.filter(is_deleted=False)
     serializer_class = ProductionsCRUDSerializer
     permission_classes = [
         IsAuthenticated,

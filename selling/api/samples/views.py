@@ -117,8 +117,7 @@ class SamplesViewSet(BaseViewSet):
         return qs
     
 class SamplesViewCRUDSet(BaseViewSet):
-    
-    queryset = SampleProductions.objects.select_related("iup").all().order_by("tgl_sample")
+    queryset = SampleProductions.objects.select_related("iup").filter(is_deleted=False).order_by("tgl_sample")
     serializer_class = SamplesCRUDSerializer
     permission_classes = [
         IsAuthenticated,
