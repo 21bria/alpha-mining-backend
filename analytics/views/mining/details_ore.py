@@ -425,17 +425,12 @@ def get_detail_range(date_start, date_end,iup_filter=None):
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
             placeholders = ",".join(["%s"] * len(iup_ids))
+
             where_actual += f" AND iup_id IN ({placeholders})"
             where_plan += f" AND iup_id IN ({placeholders})"
+
             actual_params += iup_ids
             plan_params += iup_ids
-
-    actual_params = []
-    plan_params   = []
-
-    # wajib
-    actual_params += [date_start, date_end]
-    plan_params   += [date_start, date_end]
 
     params = actual_params + plan_params
 

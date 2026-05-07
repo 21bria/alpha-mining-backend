@@ -340,13 +340,6 @@ def get_detail_range(date_start, date_end,iup_filter=None):
             actual_params += iup_ids
             plan_params += iup_ids
 
-    actual_params = []
-    plan_params   = []
-
-    # wajib
-    actual_params += [date_start, date_end]
-    plan_params   += [date_start, date_end]
-
     params = actual_params + plan_params
 
     query = f"""

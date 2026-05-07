@@ -85,14 +85,14 @@ def get_detail_daily(filter_date,iup_filter=None):
                     LPAD(t_load::text, 2, '0') AS t_load_time,
                     SUM(CASE WHEN nama_material IN ('Ballast','Biomass') THEN tonnage ELSE 0 END)::numeric AS total_tonnage
                 FROM view_mining_productions mp
-                WHERE mp.date_production = %s::date
+                WHERE {where_actual}
                 GROUP BY LPAD(t_load::text, 2, '0')
             ),
             plan_per_hour AS (
                 SELECT
                     ROUND(SUM(COALESCE(ballast) + COALESCE(biomass,0))::numeric / 22, 3) AS plan_data
                 FROM mining_plan_productions
-                WHERE date_plan = %s::date
+                WHERE {where_plan}
             )
             SELECT
                 hs.hour_label AS id,
@@ -350,17 +350,12 @@ def get_detail_range(date_start, date_end,iup_filter=None):
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
             placeholders = ",".join(["%s"] * len(iup_ids))
+
             where_actual += f" AND iup_id IN ({placeholders})"
             where_plan += f" AND iup_id IN ({placeholders})"
+
             actual_params += iup_ids
             plan_params += iup_ids
-
-    actual_params = []
-    plan_params   = []
-
-    # wajib
-    actual_params += [date_start, date_end]
-    plan_params   += [date_start, date_end]
 
     params = actual_params + plan_params
 

@@ -17,31 +17,6 @@ class LoginView(TokenObtainPairView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # def get(self, request):
-    #     user = request.user
-
-    #     # permissions efektif: direct user perms + group perms (Django built-in)
-    #     perms = sorted(list(user.get_all_permissions()))
-
-    #     groups = list(user.groups.values("id", "name"))
-
-    #     return Response({
-    #         "user": {
-    #             "id": user.id,
-    #             "username": user.get_username(),
-    #             "role": user.role,
-    #             "is_superuser": user.is_superuser,
-    #             "is_system": user.is_system,
-    #             "is_management": user.is_management,
-    #             "is_global_viewer": user.is_global_viewer,
-    #             "is_site_user": user.is_site_user,
-    #             "groups": groups,
-    #             "permissions": perms,
-    #         },
-            
-    #         "iup_access": _get_iup_access_payload(user),
-    #     })
-
     def get(self, request):
         user = request.user
 
@@ -97,6 +72,7 @@ class MeView(APIView):
             },
             "iup_access": _get_iup_access_payload(user),
         })
+
 
 class SetActiveIUPView(APIView):
     """
