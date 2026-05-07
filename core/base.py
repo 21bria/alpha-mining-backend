@@ -228,7 +228,39 @@ class BaseViewSet(viewsets.ModelViewSet):
             )
 
         return Response({"restored": updated}, status=status.HTTP_200_OK)
+    
+    # ------------------------------
+    # BULK CREATE
+    # ------------------------------
+    @action(detail=False, methods=["post"], url_path="bulk-create")
+    def bulk_create(self, request):
+        data = request.data
 
+        if not isinstance(data, list):
+            return Response(
+                {"detail": "Payload must be a list of objects"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not data:
+            return Response(
+                {"detail": "Payload is empty"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(data=data, many=True)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            instances = serializer.save()
+
+        return Response(
+            {
+                "detail": "Bulk create success",
+                "count": len(instances),
+            },
+            status=status.HTTP_201_CREATED,
+        )
     
     # ------------------------------
     # RANGE DELETE HELPERS

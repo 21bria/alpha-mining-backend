@@ -4,6 +4,8 @@ from django.http import FileResponse
 from django.conf import settings
 import os
 from rest_framework.decorators import action
+from rest_framework import status
+from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import filters
 from rest_framework import filters as drf_filters
@@ -31,6 +33,9 @@ def get_selling_types():
     
 class SamplesViewSet(BaseViewSet):
     queryset = SamplesView.objects.none()
+    ordering_fields = ["date_sample"]
+    ordering = ["-date_sample"]
+    
     serializer_class = SamplesSerializer
     permission_classes = [
         IsAuthenticated,
@@ -129,7 +134,6 @@ class SamplesViewCRUDSet(BaseViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     
-
     search_fields = [
         "tgl_sample",
         "sample_id",
@@ -165,6 +169,85 @@ class SamplesViewCRUDSet(BaseViewSet):
             .order_by("tgl_sample")
         )
     
+    # bulk create dan import export di sini karena butuh permission yang sama dengan 
+    # crudset, kalau di viewset biasa nanti permissionnya beda dan repot ngecek permission di dalam methodnya  
+    # get_queryset juga perlu di override untuk handle filter iup dan role user
+    
+    def _get_active_iup_id_for_user(self, user):
+        active = getattr(user, "active_iup_id", None) or getattr(user, "iup_id", None)
+        if active:
+            return str(active)
+
+        allowed = user_allowed_iup_ids(user)
+        if not allowed:
+            return None
+
+        try:
+            return str(next(iter(allowed)))
+        except TypeError:
+            allowed_list = list(allowed)
+            return str(allowed_list[0]) if allowed_list else None
+
+    @action(detail=False, methods=["post"], url_path="bulk-create")
+    def bulk_create(self, request):
+        data = request.data
+
+        if not isinstance(data, list):
+            return Response(
+                {"detail": "Payload must be a list of objects."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not data:
+            return Response(
+                {"detail": "Payload is empty."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+
+        iup_id = (
+            request.query_params.get("iup_id")
+            or request.query_params.get("iup")
+        )
+
+        # SYSTEM / SUPERADMIN / MANAGEMENT
+        if getattr(user, "is_system", False) or getattr(user, "is_superuser", False):
+
+            if not iup_id:
+                return Response(
+                    {"detail": "IUP is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # SITE USER
+        else:
+            iup_id = self._get_active_iup_id_for_user(user)
+
+            if not iup_id:
+                return Response(
+                    {"detail": "No active IUP for current user."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # inject iup ke semua row
+        for row in data:
+            row["iup"] = iup_id
+
+        serializer = self.get_serializer(data=data, many=True)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            instances = serializer.save()
+
+        return Response(
+            {
+                "detail": "Bulk ore productions created successfully.",
+                "count": len(instances),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    
     def handle_import(self, file, request):
         job = ImportJob.objects.create(
             module="selling.samples",
@@ -179,7 +262,6 @@ class SamplesViewCRUDSet(BaseViewSet):
 
         return Response({"status": "import queued", "job_id": str(job.id)}, status=202)
     
-
     def handle_export(self, request):
         params = {}
         for key in request.query_params.keys():

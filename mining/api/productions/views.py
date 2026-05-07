@@ -22,7 +22,11 @@ from .serializers import ProductionsSerializer
 from .filters import ProductionsFilter
 
 class ProductionsViewSet(BaseViewSet):
-    queryset = mineProductionsView.objects.all()
+    queryset = mineProductionsView.objects.all().order_by("-date_production")
+
+    ordering_fields = ["date_production"]
+    ordering = ["-date_production"]
+    
     serializer_class = ProductionsSerializer
     permission_classes = [
         IsAuthenticated,

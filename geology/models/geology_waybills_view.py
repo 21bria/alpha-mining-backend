@@ -27,16 +27,20 @@ class listTemporary(models.Model):
     sample_id      = models.CharField(max_length=25, default=None, null=True, blank=True)
     type_sample    = models.CharField(max_length=25, default=None, null=True, blank=True)
     sample_method  = models.CharField(max_length=25, default=None, null=True, blank=True)
-    nama_material  = models.CharField(max_length=50, default=None, null=True, blank=True)
+    material       = models.CharField(max_length=50, default=None, null=True, blank=True)
     sampling_area  = models.CharField(max_length=50, default=None, null=True, blank=True)
     sampling_point = models.CharField(max_length=50, default=None, null=True, blank=True)
     batch_code     = models.CharField(max_length=10, default=None, null=True, blank=True)
     no_save        = models.CharField(max_length=15, default=None, null=True, blank=True)
     status_input   = models.CharField(max_length=15, default=None, null=True, blank=True)
-    id_user        = models.IntegerField(default=None, null=True, blank=True)
+    iup_id         = models.IntegerField(default=None, null=True, blank=True)
+    iup_code       = models.CharField(max_length=50, default=None, null=True, blank=True)
+    iup_name       = models.CharField(max_length=100, default=None, null=True, blank=True)
+    user_id        = models.IntegerField(default=None, null=True, blank=True)
+    username       = models.CharField(max_length=50, default=None, null=True, blank=True)
 
     class Meta:
         managed   = False
-        db_table  = 'view_waybills_temporary'
+        db_table  = 'view_waybill_temporary'
    
 

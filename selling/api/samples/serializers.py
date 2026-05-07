@@ -107,7 +107,18 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
             "discharge_label",
             "product_code_label",
         ]
+    
+    def build_code(self, validated_data):
+        iup = validated_data.get("iup")
+        sample_number = validated_data.get("sample_number")
 
+        iup_code = getattr(iup, "iup_code", f"IUP-{iup.id}")
+
+        if sample_number:
+            return f"{iup_code}-{sample_number}"
+
+        return f"{iup_code}-UNKNOWN"
+    
     def get_material_label(self, obj):
         if not obj.id_material:
             return None
@@ -308,7 +319,15 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data["user"] = self.context["request"].user
-        return super().create(validated_data)
+        
+        if not validated_data.get("code"):
+            validated_data["code"] = self.build_code(validated_data)
+
+        # return super().create(validated_data)
+        instance = super().create(validated_data)
+
+        return instance    
+        # return super().create(validated_data)
 
     def update(self, instance, validated_data):
         u = self.context["request"].user

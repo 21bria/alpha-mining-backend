@@ -24,6 +24,10 @@ from analytics.tasks import run_export_job
 
 class SellingViewSet(BaseViewSet):
     queryset = SellingDetailsBargingView.objects.none()
+    
+    ordering_fields = ["date_hauling"]
+    ordering = ["-date_hauling"]
+
     serializer_class = SellingBargingSerializer
     permission_classes = [
         IsAuthenticated,

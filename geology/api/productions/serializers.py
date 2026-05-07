@@ -1,3 +1,5 @@
+from django.utils import timezone
+import random
 from rest_framework import serializers
 import re
 from geology.models import OreProductions,OreProductionsView
@@ -108,6 +110,15 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             "user",
         ]
 
+    def build_code(self, validated_data):
+        iup = validated_data.get("iup")
+        iup_code = getattr(iup, "iup_code", f"IUP-{iup.id}")
+
+        ts = timezone.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+        suffix = random.randint(1000, 9999)
+
+        return f"{iup_code}-{ts}-{suffix}"
+    
     def get_prospect_label(self, obj):
         if not obj.id_prospect_area:
             return None
@@ -167,7 +178,23 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
         pile = SourceMinesDome.objects.filter(id=pile_id).only("dumping").first()
         return pile.dumping_id if pile and pile.dumping_id else None
 
+    def resolve_sale_adjust(self, attrs):
+        material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
 
+        if not material_id:
+            return None
+
+        material = Material.objects.filter(id=material_id).only("name").first()
+        name = (material.name or "").upper() if material else ""
+
+        if "LIM" in name:
+            return "HPAL"
+
+        if "SAP" in name:
+            return "RKEF"
+
+        return None
+    
     def build_kode_batch(self, attrs):
         material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
         unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
@@ -218,6 +245,11 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
         if not attrs.get("status_dome"):
             attrs["status_dome"] = "Continue"
 
+        if not attrs.get("sale_adjust"):
+            sale_adjust = self.resolve_sale_adjust(attrs)
+            if sale_adjust:
+                attrs["sale_adjust"] = sale_adjust   
+
         qs = OreProductions.objects.filter(
             iup=iup,
             is_deleted=False
@@ -252,9 +284,11 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data["user"] = self.context["request"].user
-        instance = super().create(validated_data)
 
-        # update batch jika complete
+        if not validated_data.get("code"):
+            validated_data["code"] = self.build_code(validated_data)
+
+        instance = super().create(validated_data)
         self.update_batch_status(instance)
 
         return instance
