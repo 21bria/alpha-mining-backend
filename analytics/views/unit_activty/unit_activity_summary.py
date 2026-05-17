@@ -85,69 +85,102 @@ def summary_hm_unit_kpi(request):
         return JsonResponse({"error": f"Invalid date filter: {str(e)}"}, status=400)
 
     try:
-        query = """
-            SELECT
-                u.unit_vendor,
-                TRIM(c.category) as category,
-                COALESCE(SUM(f.volume), 0) AS fuel,
-                COALESCE(SUM(CASE WHEN s.code = 'EWH' THEN d.duration_min END), 0) AS op,
-                COALESCE(SUM(CASE WHEN s.code IN ('STB','SUPPORT','WX','SLP') THEN d.duration_min END), 0) AS st,
-                COALESCE(SUM(CASE WHEN s.code IN ('PM','BD') THEN d.duration_min END), 0) AS mt,
-                COALESCE(SUM(CASE WHEN s.code = 'BD' THEN d.duration_min END), 0) AS bd,
-                COUNT(DISTINCT h.date) * 1440 AS total_time,
-                ROUND(
-                    COALESCE(
-                        SUM(CASE WHEN s.code = 'EWH' THEN d.duration_min END)::numeric
-                        / NULLIF(SUM(CASE WHEN s.code IN ('EWH','PM','BD') THEN d.duration_min END), 0),
-                    0) * 100, 2
-                ) AS ma,
-                ROUND(
-                    COALESCE(
-                        SUM(CASE WHEN s.code IN ('EWH','STB','SUPPORT','WX','SLP') THEN d.duration_min END)::numeric
-                        / NULLIF((COUNT(DISTINCT h.date) * 1440), 0),
-                    0) * 100,
-                    2
-                ) AS pa,
-                ROUND(
-                    COALESCE(
-                        SUM(CASE WHEN s.code = 'EWH' THEN d.duration_min END)::numeric
-                        / NULLIF(SUM(CASE WHEN s.code IN ('EWH','STB','SUPPORT','WX','SLP') THEN d.duration_min END), 0),
-                    0) * 100,
-                    2
-                ) AS ua,
-                ROUND(
-                    COALESCE(
-                        SUM(CASE WHEN s.code = 'EWH' THEN d.duration_min END)::numeric
-                        / NULLIF((COUNT(DISTINCT h.date) * 1440), 0),
-                    0) * 100,
-                    2
-                ) AS eu
-            FROM mining_hm_unit h
-            LEFT JOIN master_units u ON u.id = h.unit_id
-            LEFT JOIN mining_hm_unit_detail d ON d.hm_unit_id = h.id
-            LEFT JOIN master_units_categories c ON c.id = u.id_category
-            LEFT JOIN master_vendors v ON v.id = u.id_vendor
-            LEFT JOIN master_activity_categories s ON s.id = d.status_id
-            LEFT JOIN mining_fuel_consumption f ON f.unit = u.unit_code AND f.date = h.date
-            WHERE h.date BETWEEN %s AND %s
-        """
-
+        extra_where = ""
         params = [ds, de]
 
         iup_clause, iup_params = build_iup_clause(iup_filter, "h")
-        query += iup_clause
+        extra_where += iup_clause
         params.extend(iup_params)
 
         if categories:
             placeholders = ",".join(["%s"] * len(categories))
-            query += f" AND LOWER(TRIM(c.category)) IN ({placeholders})"
-            params.extend([c.lower().strip() for c in categories])
+            extra_where += f" AND LOWER(TRIM(c.category)) IN ({placeholders})"
+            params.extend([x.lower().strip() for x in categories])
 
         if vendor:
-            query += " AND v.id = %s"
+            extra_where += " AND u.id_vendor = %s"
             params.append(vendor)
 
-        query += " GROUP BY u.unit_vendor, c.category ORDER BY u.unit_vendor"
+        query = f"""
+            WITH filtered_hm AS (
+                SELECT
+                    h.id,
+                    h.date,
+                    u.unit_code,
+                    u.unit_vendor,
+                    TRIM(c.category) AS category
+                FROM mining_hm_unit h
+                LEFT JOIN master_units u ON u.id = h.unit_id
+                LEFT JOIN master_units_categories c ON c.id = u.id_category
+                WHERE h.date BETWEEN %s AND %s
+                {extra_where}
+            ),
+            activity AS (
+                SELECT
+                    fh.unit_vendor,
+                    fh.category,
+
+                    COALESCE(SUM(CASE WHEN s.code = 'EWH' THEN d.duration_min ELSE 0 END), 0) AS ewh_min,
+                    COALESCE(SUM(CASE WHEN s.code IN ('STB','SUPPORT','WX','SLP') THEN d.duration_min ELSE 0 END), 0) AS standby_min,
+                    COALESCE(SUM(CASE WHEN s.code IN ('PM','BD') THEN d.duration_min ELSE 0 END), 0) AS maintenance_min,
+                    COALESCE(SUM(CASE WHEN s.code = 'BD' THEN d.duration_min ELSE 0 END), 0) AS bd_min,
+
+                    COUNT(DISTINCT fh.unit_code || '-' || fh.date) * 1440 AS total_time_min
+
+                FROM filtered_hm fh
+                LEFT JOIN mining_hm_unit_detail d ON d.hm_unit_id = fh.id
+                LEFT JOIN master_activity_categories s ON s.id = d.status_id
+                GROUP BY fh.unit_vendor, fh.category
+            ),
+            fuel_sum AS (
+                SELECT
+                    fh.unit_vendor,
+                    fh.category,
+                    COALESCE(SUM(f.volume), 0) AS fuel
+                FROM filtered_hm fh
+                LEFT JOIN mining_fuel_consumption f
+                    ON f.unit = fh.unit_code
+                    AND f.date = fh.date
+                GROUP BY fh.unit_vendor, fh.category
+            )
+            SELECT
+                a.unit_vendor,
+                a.category,
+                ROUND(COALESCE(f.fuel, 0)::numeric, 2) AS fuel,
+
+                ROUND(a.ewh_min::numeric / 60, 2) AS working,
+                ROUND(a.standby_min::numeric / 60, 2) AS standby,
+                ROUND(a.maintenance_min::numeric / 60, 2) AS maintenance,
+                ROUND(a.bd_min::numeric / 60, 2) AS bd,
+                ROUND(a.total_time_min::numeric / 60, 2) AS time,
+
+                ROUND(COALESCE(a.ewh_min::numeric / NULLIF(a.ewh_min + a.maintenance_min, 0), 0) * 100, 2) AS ma,
+                ROUND(COALESCE((a.ewh_min + a.standby_min)::numeric / NULLIF(a.total_time_min, 0), 0) * 100, 2) AS pa,
+                ROUND(COALESCE(a.ewh_min::numeric / NULLIF(a.ewh_min + a.standby_min, 0), 0) * 100, 2) AS ua,
+                ROUND(COALESCE(a.ewh_min::numeric / NULLIF(a.total_time_min, 0), 0) * 100, 2) AS eu,
+
+                ROUND(
+                    (
+                        a.total_time_min -
+                        (a.ewh_min + a.standby_min + a.maintenance_min)
+                    )::numeric / 60,
+                    2
+                ) AS missing_hour,
+
+                CASE
+                    WHEN (a.ewh_min + a.standby_min + a.maintenance_min) = a.total_time_min
+                        THEN 'Complete'
+                    WHEN (a.ewh_min + a.standby_min + a.maintenance_min) < a.total_time_min
+                        THEN 'Incomplete'
+                    ELSE 'Over'
+                END AS status
+
+            FROM activity a
+            LEFT JOIN fuel_sum f
+                ON f.unit_vendor = a.unit_vendor
+                AND f.category = a.category
+            ORDER BY a.unit_vendor, a.category
+        """
 
         with connection.cursor() as cursor:
             cursor.execute(query, params)
@@ -159,15 +192,17 @@ def summary_hm_unit_kpi(request):
                 "unit": r[0],
                 "category": r[1],
                 "fuel": round(float(r[2] or 0), 2),
-                "op": min_to_hour(r[3]),
-                "st": min_to_hour(r[4]),
-                "mt": min_to_hour(r[5]),
-                "bd": min_to_hour(r[6]),
-                "time": min_to_hour(r[7]),
+                "op": float(r[3] or 0),
+                "st": float(r[4] or 0),
+                "mt": float(r[5] or 0),
+                "bd": float(r[6] or 0),
+                "time": float(r[7] or 0),
                 "ma": float(r[8] or 0),
                 "pa": float(r[9] or 0),
                 "ua": float(r[10] or 0),
                 "eu": float(r[11] or 0),
+                "missing_hour": float(r[12] or 0),
+                "status": r[13],
             })
 
         return JsonResponse({
