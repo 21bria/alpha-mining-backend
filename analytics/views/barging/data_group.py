@@ -852,62 +852,106 @@ def summary_barging_overview(request):
 
         query = f"""
             WITH barge_group AS (
-                SELECT
-                    mb.barge_code,
-                    MIN(s.date_hauling::date + s.time_hauling) AS start_loading,
-                    MAX(s.date_hauling::date + s.time_hauling) AS end_loading,
-                    SUM(s.tonnage) AS total_tonnage,
-                    SUM(CASE WHEN m.name = 'LIM' THEN s.tonnage ELSE 0 END) AS total_lim,
-                    SUM(CASE WHEN m.name = 'SAP' THEN s.tonnage ELSE 0 END) AS total_sap
-                FROM selling_barging s
-                LEFT JOIN master_barge mb ON mb.id = s.barge_code
-                LEFT JOIN master_materials m ON m.id = s.id_material
-                WHERE s.date_hauling BETWEEN %s AND %s
-                {iup_clause_s}
-                GROUP BY mb.barge_code
-            )
             SELECT
-                COALESCE(COUNT(DISTINCT barge_code), 0) AS total_barge,
-                COALESCE(SUM(total_tonnage), 0) AS total_ore,
-                COALESCE(SUM(total_lim), 0) AS total_lim,
-                COALESCE(SUM(total_sap), 0) AS total_sap,
+                mb.barge_code,
+
+                MIN(
+                    CASE
+                        WHEN s.date_hauling IS NOT NULL AND s.time_hauling IS NOT NULL
+                        THEN s.date_hauling::date + s.time_hauling
+                        ELSE NULL
+                    END
+                ) AS start_loading,
+
+                MAX(
+                    CASE
+                        WHEN s.date_hauling IS NOT NULL AND s.time_hauling IS NOT NULL
+                        THEN s.date_hauling::date + s.time_hauling
+                        ELSE NULL
+                    END
+                ) AS end_loading,
+
+                SUM(COALESCE(s.tonnage, 0)) AS total_tonnage,
+
+                SUM(
+                    CASE WHEN m.name = 'LIM'
+                    THEN COALESCE(s.tonnage, 0)
+                    ELSE 0 END
+                ) AS total_lim,
+
+                SUM(
+                    CASE WHEN m.name = 'SAP'
+                    THEN COALESCE(s.tonnage, 0)
+                    ELSE 0 END
+                ) AS total_sap
+
+            FROM selling_barging s
+            LEFT JOIN master_barge mb ON mb.id = s.barge_code
+            LEFT JOIN master_materials m ON m.id = s.id_material
+            WHERE s.date_hauling BETWEEN %s AND %s
+            {iup_clause_s}
+            GROUP BY mb.barge_code
+        ),
+
+        barge_calc AS (
+            SELECT
+                barge_code,
+                start_loading,
+                end_loading,
+                total_tonnage,
+                total_lim,
+                total_sap,
 
                 COALESCE(
                     ROUND(
-                        (SUM(total_tonnage) / NULLIF(COUNT(DISTINCT barge_code), 0))::numeric,
+                        (
+                            EXTRACT(EPOCH FROM (end_loading - start_loading)) / 3600
+                        )::numeric,
                         2
                     ),
                     0
-                ) AS avg_mt,
+                ) AS loading_time
 
-                COALESCE(
-                    ROUND(
-                        AVG(EXTRACT(EPOCH FROM (end_loading - start_loading)) / 3600)::numeric,
-                        2
-                    ),
-                    0
-                ) AS avg_loading_time,
+            FROM barge_group
+        )
 
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'barge_code', barge_code,
-                            'tonnage', ROUND(total_tonnage::numeric, 2),
-                            'lim', ROUND(total_lim::numeric, 2),
-                            'sap', ROUND(total_sap::numeric, 2),
-                            'loading_time',
-                                ROUND(
-                                    (EXTRACT(EPOCH FROM (end_loading - start_loading)) / 3600)::numeric,
-                                    2
-                                ),
-                            'start_loading', start_loading,
-                            'end_loading', end_loading
-                        )
-                        ORDER BY total_tonnage DESC
-                    ) FILTER (WHERE barge_code IS NOT NULL),
-                    '[]'::json
-                ) AS barges
-            FROM barge_group;
+        SELECT
+            COALESCE(COUNT(DISTINCT barge_code), 0) AS total_barge,
+            COALESCE(SUM(total_tonnage), 0) AS total_ore,
+            COALESCE(SUM(total_lim), 0) AS total_lim,
+            COALESCE(SUM(total_sap), 0) AS total_sap,
+
+            COALESCE(
+                ROUND(
+                    (
+                        SUM(total_tonnage) / NULLIF(COUNT(DISTINCT barge_code), 0)
+                    )::numeric,
+                    2
+                ),
+                0
+            ) AS avg_mt,
+
+            COALESCE(
+                ROUND(AVG(loading_time)::numeric, 2),
+                0
+            ) AS avg_loading_time,
+
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'barge_code', barge_code,
+                        'tonnage', ROUND(total_tonnage::numeric, 2),
+                        'lim', ROUND(total_lim::numeric, 2),
+                        'sap', ROUND(total_sap::numeric, 2),
+                        'loading_time', loading_time,
+                        'start_loading', start_loading,
+                        'end_loading', end_loading
+                    )
+                    ORDER BY total_tonnage DESC
+                ) FILTER (WHERE barge_code IS NOT NULL),
+                '[]'::json
+            ) AS barges
+        FROM barge_calc;
         """
 
         params = [ds, de] + iup_params_s
