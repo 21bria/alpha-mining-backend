@@ -1,3 +1,6 @@
+Average Matric Tonnage 
+======================================================
+
 Penjelasan untuk 2 metrik :
 
 1. Avg MT
@@ -17,8 +20,6 @@ Total Barge = 3
 Avg MT = 60.000 / 3
 Avg MT = 20.000 MT
 
-Formula Excel:
-=SUM(B2:B4)/COUNTA(A2:A4)
 
 2. Avg Loading Time
 
@@ -40,23 +41,12 @@ atau:
 
 Avg Loading Time = AVERAGE(Loading Time tiap barge)
 
-Contoh Excel:
+Contoh :
 
 Barge	Start Loading	End Loading	Loading Time
-BG001	08:00	14:00	6
-BG002	10:00	18:00	8
-BG003	07:00	16:00	9
+BG001	08:00	        14:00	    6
+BG002	10:00	        18:00	    8
+BG003	07:00	        16:00	    9
 
 Avg Loading Time = (6 + 8 + 9) / 3
 Avg Loading Time = 7,67 jam
-
-Formula Excel Loading Time:
-
-=(C2-B2)*24
-
-Formula Excel Avg Loading Time:
-
-=AVERAGE(D2:D4)
-
-Kalau start/end ada tanggal + jam, formula tetap sama:
-=(C2-B2)*24

@@ -1,3 +1,6 @@
+KPI EQUIPMENTS :
+=========================================
+
 op / working = EWH
 st / standby = STB + SUPPORT + WX + SLP
 mt / maintenance = PM + BD
@@ -129,7 +132,7 @@ EU = 41.67%
 
 EU biasanya paling kecil karena dibanding total waktu penuh.
 
-=======================================
+========================================
 Kesimpulan sederhana
 KPI	Fokus
 MA	kesehatan alat
@@ -137,3 +140,21 @@ PA	alat tersedia
 UA	alat dipakai
 EU	alat produktif real
 =========================================
+
+Maksudnya STB/standby dihitung dari beberapa kondisi unit yang tidak kerja tapi masih standby, yaitu:
+
+ST = STB + SUPPORT + WX + SLP
+
+Artinya:
+
+WX = delay karena weather/cuaca, misalnya hujan, kabut, petir, jalan licin, visibility rendah.
+
+SUPPORT = unit standby karena menunggu/terkait support activity, misalnya tunggu fuel, tunggu operator, tunggu instruksi, tunggu unit pendukung, tunggu material, atau standby untuk mendukung pekerjaan lain.
+
+Jadi kalau unit tidak masuk OP/working (EWH), tapi juga bukan maintenance (PM/BD) dan bukan breakdown (BD), maka jamnya masuk ke kelompok standby, termasuk WX dan SUPPORT
+
+============
+EWH = Effective Working Hour
+Jam kerja efektif alat/unit saat benar-benar beroperasi produksi.
+PM = Preventive Maintenance
+Perawatan berkala/rutin untuk mencegah kerusakan, misalnya service, greasing, ganti oli, inspeksi

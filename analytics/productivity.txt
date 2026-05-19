@@ -1,6 +1,7 @@
 
 Productivity:
-==============
+
+============================================================================
 
 Excavator dihitung sebagai fleet jika dia melakukan aktivitas loading ORE
 pada periode tersebut.
@@ -16,6 +17,8 @@ pada lokasi dan loading point tertentu.
 
 Productivity dihitung dari total tonase ORE yang dihasilkan
 dibagi dengan jam kerja efektif excavator (EWH) pada lokasi tersebut.
+
+============================================================================
 
 Formula :
 

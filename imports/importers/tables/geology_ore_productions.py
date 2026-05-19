@@ -7,6 +7,7 @@ from datetime import date
 from django.db import transaction
 from django.db.models.functions import Lower
 from datetime import datetime
+from django.db.models import Sum
 
 from core.models.base import make_code
 from master.models import (
@@ -18,7 +19,7 @@ from master.models import (
     SourceMinesDome,
     OreTruckFactor,
 )
-from geology.models import OreProductions
+from geology.models import OreProductions,ProductionsConfig
 
 from imports.utils.parsers import norm, parse_flexible_date
 from imports.utils.converters import to_nullable_float, to_nullable_int
@@ -67,9 +68,8 @@ class OreProductionImporter:
 
         today = date.today()
 
-        # =========================================================
         # 1. VALIDATE + COLLECT
-        # =========================================================
+
         for row_no, row in enumerate(rows, start=1):
             try:
                 iup_code = upper_or_none(row.get("iup_code"))
@@ -171,9 +171,9 @@ class OreProductionImporter:
         if not parsed:
             return res
 
-        # =========================================================
+
         # 2. RESOLVE MASTER DATA
-        # =========================================================
+
         iup_map = {
             code_l: obj_id
             for code_l, obj_id in (
@@ -242,10 +242,9 @@ class OreProductionImporter:
             )
         }
 
-        # =========================================================
         # 3. RESOLVE ORE TRUCK FACTOR
         # key = (iup_id, type_tf_l, material_id)
-        # =========================================================
+
         truck_factor_map = {
             (iup_id, (type_tf or "").casefold(), material_id): ton
             for iup_id, type_tf, material_id, ton in (
@@ -258,11 +257,11 @@ class OreProductionImporter:
             )
         }
 
-        # =========================================================
         # 4. BUILD OBJECTS
-        # =========================================================
-        to_create: list[OreProductions] = []
 
+        to_create: list[OreProductions] = []
+        incoming_totals = {}
+        
         for item in parsed:
             row_no = item["row_no"]
             raw = item["raw"]
@@ -353,6 +352,47 @@ class OreProductionImporter:
                 else:
                     sale_adjust = None
 
+                # GET CONFIG
+                max_increment = ProductionsConfig.objects.filter(
+                    key="MAX_INCREMENT_PRODUCTION"
+                ).values_list("value", flat=True).first() or 10
+
+                # CHECK EXISTING TOTAL
+                existing_total = OreProductions.objects.filter(
+                    iup_id=iup_id,
+                    id_material=id_material,
+                    unit_truck=item["truck"],
+                    # id_stockpile=id_stockpile,
+                    id_pile=id_pile,
+                    batch_code=item["batch"],
+                    is_deleted=False,
+                ).aggregate(
+                    total=Sum("increment")
+                )["total"] or 0
+
+                batch_key = (
+                    iup_id,
+                    id_material,
+                    item["truck"],
+                    id_pile,
+                    item["batch"],
+                )
+
+                incoming_increment = item["increment"] or 0
+
+                incoming_total = incoming_totals.get(batch_key, 0)
+
+                if existing_total + incoming_total + incoming_increment > max_increment:
+                    raise ValueError(
+                        f"Total increment maksimal {max_increment} "
+                        f"untuk batch '{item['batch']}'"
+                    )
+
+                incoming_totals[batch_key] = (
+                    incoming_total + incoming_increment
+                )
+
+                # CREATE OBJECT
                 obj = OreProductions(
                     iup_id=iup_id,
                     code=code,
@@ -392,9 +432,8 @@ class OreProductionImporter:
             except Exception as e:
                 res.add_error(row_no, raw, str(e))
 
-        # =========================================================
         # 5. BULK CREATE
-        # =========================================================
+     
         if to_create:
             with transaction.atomic():
                 OreProductions.objects.bulk_create(to_create, batch_size=500)

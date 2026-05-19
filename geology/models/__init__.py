@@ -16,3 +16,4 @@ from .merge_stock import *
 from .sample_crm_view import *
 from .sample_duplikat_view import *
 from .geology_view_sample_type_count import *
+from .geology_config import *

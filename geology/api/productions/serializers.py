@@ -1,8 +1,8 @@
 from django.utils import timezone
 import random
 from rest_framework import serializers
-import re
-from geology.models import OreProductions,OreProductionsView
+from django.db.models import Sum
+from geology.models import OreProductions,OreProductionsView,ProductionsConfig
 from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block
 
 class ProductionsSerializer(serializers.ModelSerializer):
@@ -196,11 +196,11 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
         return None
     
     def build_kode_batch(self, attrs):
-        material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
-        unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
+        material_id  = attrs.get("id_material", getattr(self.instance, "id_material", None))
+        unit_truck   = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
         stockpile_id = attrs.get("id_stockpile", getattr(self.instance, "id_stockpile", None))
-        pile_id = attrs.get("id_pile", getattr(self.instance, "id_pile", None))
-        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
+        pile_id      = attrs.get("id_pile", getattr(self.instance, "id_pile", None))
+        batch_code   = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
 
         if not material_id or not unit_truck or not stockpile_id or not pile_id or not batch_code:
             return None
@@ -264,21 +264,46 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "batch_code": "Failed to generate kode batch. Check material, unit truck, dome/pile, and batch code."
             })
-
-        # if qs.filter(kode_batch__iexact=generated_kode_batch).exists():
-        #     material_name = self.get_material_name(attrs) or "-"
-        #     stockpile_name = self.get_stockpile_name(attrs) or "-"
-        #     pile_name = self.get_pile_name(attrs) or "-"
-        #     batch = attrs.get("batch_code", getattr(self.instance, "batch_code", None)) or "-"
-
-        #     raise serializers.ValidationError({
-        #         "batch_code": (
-        #             f"Duplicate batch: "
-        #             f"{material_name}, {stockpile_name}, {pile_name} (Batch {batch})"
-        #         )
-        #     })
-
+        
         attrs["kode_batch"] = generated_kode_batch
+ 
+     # GET CONFIG MAX INCREMENT
+        max_increment = ProductionsConfig.objects.filter(
+            key="MAX_INCREMENT_PRODUCTION"
+        ).values_list("value", flat=True).first() or 10
+
+        # CHECK INCREMENT
+        material_id = attrs.get("id_material",getattr(self.instance, "id_material", None))
+
+        unit_truck = attrs.get( "unit_truck",getattr(self.instance, "unit_truck", None))
+
+        pile_id = attrs.get("id_pile",getattr(self.instance, "id_pile", None) )
+
+        batch_code = attrs.get("batch_code",getattr(self.instance, "batch_code", None) )
+
+        current_increment = attrs.get("increment",
+            getattr(self.instance, "increment", 0)
+        ) or 0
+
+        increment_qs = qs.filter(
+            id_material=material_id,
+            unit_truck=unit_truck,
+            id_pile=pile_id,
+            batch_code=batch_code,
+        )
+
+        existing_total = increment_qs.aggregate(
+            total=Sum("increment")
+        )["total"] or 0
+
+        if existing_total + current_increment > max_increment:
+            raise serializers.ValidationError({
+                "increment": (
+                    f"Total increment maksimal {max_increment} "
+                    # "untuk kombinasi batch yang sama."
+                )
+            })
+        
         return attrs
     
 
