@@ -581,7 +581,7 @@ def sio2ChartCoa(request):
                 {t2_iup_clause}
             ) x
             WHERE x.rn = 1
-        ) AS t2 ON t1.code_lot = t2.product_codee
+        ) AS t2 ON t1.code_lot = t2.product_code
         WHERE 1=1
         {t1_iup_clause}
     """

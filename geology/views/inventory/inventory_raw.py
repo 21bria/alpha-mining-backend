@@ -1,16 +1,12 @@
 # views.py
 import logging
 from django.http import JsonResponse
-from django.db import connections, DatabaseError,connection
-import pandas as pd
-import calendar
-from datetime import datetime, timedelta
-from geology.services.utils import validate_month,validate_year
+from django.db import connection
 logger = logging.getLogger(__name__) #tambahkan ini untuk multi database.
 import json
 from decimal import Decimal
 from decimal import Decimal, ROUND_HALF_UP
-# Memanggil fungsi utility
+
 
 def f2(v):
     return Decimal(v).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
@@ -24,6 +20,7 @@ class NaNEncoder(json.JSONEncoder):
 
 def to_float1(v):
     return round(float(v or 0), 1)
+
 # /api/geology/raw/inventory/list/?iup_id=1&page=1
 # /api/geology/raw/inventory/list/?iup_id=1&sale_filter=Finished&page=1
 # Get Inventory
@@ -47,10 +44,6 @@ def build_inventory_filters(request):
         'LIM': 'HPAL',
         'SAP': 'RKEF',
     }
-
-    # if sale_filter not in [None, '']:
-        # where_conditions.append("t1.sale_adjust = %s")
-        # params.append(sale_filter)
 
     if sale_filter not in [None, '']:
         mapped_sale = sale_mapping.get(sale_filter, sale_filter)

@@ -12,4 +12,7 @@ urlpatterns = [
 
     # GIS
     path('gis/', include('analytics.views.gis.urls')),
+
+    # Ai
+    path("ai/", include("analytics.views.ai.urls")),
 ]

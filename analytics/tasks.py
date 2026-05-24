@@ -55,7 +55,6 @@ def run_export_job(schema_name, job_id):
             job.save(update_fields=["status", "error"])
             raise
 
-
 def _cleanup_empty_parent_dirs(file_path: str, stop_dir_name: str = "exports"):
     """
     Hapus folder kosong berantai ke atas sampai stop_dir_name.

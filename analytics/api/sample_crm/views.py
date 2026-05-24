@@ -1,8 +1,6 @@
 from django.db import connection
 from rest_framework.response import Response
-from django.http import FileResponse
-from django.conf import settings
-import os
+
 
 from rest_framework import filters as drf_filters
 from django_filters.rest_framework import DjangoFilterBackend

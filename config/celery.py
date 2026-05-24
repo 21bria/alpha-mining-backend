@@ -14,6 +14,9 @@ app.autodiscover_tasks()
 app.conf.timezone = settings.TIME_ZONE
 app.conf.enable_utc = True
 
+# manual import task bot
+import analytics.services.bot.tasks.production_review
+
 app.conf.beat_schedule = {
     # CLEAN  FILE 
     'cleanup-import-files-daily': {
@@ -27,20 +30,4 @@ app.conf.beat_schedule = {
         'args': (7,),  # hapus >7 hari
     },
 
-    # existing kamu
-    # 'clean-duplicate-files-daily': {
-    #     'task': 'kqms.task.cleanup.clean_temp_duplicates',
-    #     'schedule': crontab(hour=2, minute=0),
-    # },
-
-    # 'truncate-task-imports-daily': {
-    #     'task': 'kqms.task.cleanup.truncate_old_task_imports',
-    #     'schedule': crontab(hour=2, minute=30),
-    #     'args': (1,),
-    # },
-
-    # 'auto-sync-dome-status-every-1-hour': {
-    #     'task': 'kqms.task.auto_sync.auto_sync_dome_status_task',
-    #     'schedule': crontab(minute=0, hour='*/1'),
-    # },
 }

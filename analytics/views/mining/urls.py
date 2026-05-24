@@ -14,6 +14,9 @@ from ..unit_activty.unit_activity_summary import *
 from ..unit_activty.productivity import *
 from ..unit_activty.kpi_monitoring import *
 
+# Weekly Report
+from ..weekly.get_production import *
+
 urlpatterns = [
     path('reserve/', get_reserve_summary),
     path('summary/', get_summary_mines),
@@ -36,5 +39,8 @@ urlpatterns = [
 
     # Productivity
     path('summary-productivity/ore/', summary_productivity_ore),
+
+    # Weekly
+    path('summary/weekly/', get_summary_weekly),
    
 ]

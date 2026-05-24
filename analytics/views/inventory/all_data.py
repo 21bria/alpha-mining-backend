@@ -31,13 +31,13 @@ def to_float1(v):
 
 def get_inventory_summary(request):
     try:
-        iup_filter = request.GET.get("iup_id") or request.GET.get("iup_filter")
+        iup_filter  = request.GET.get("iup_id") or request.GET.get("iup_filter")
         filter_type = request.GET.get("filter_type")
-        year = request.GET.get("year")
-        month = request.GET.get("month")
-        week = request.GET.get("week")
-        date_start = request.GET.get("date_start")
-        date_end = request.GET.get("date_end")
+        year        = request.GET.get("year")
+        month       = request.GET.get("month")
+        week        = request.GET.get("week")
+        date_start  = request.GET.get("date_start")
+        date_end    = request.GET.get("date_end")
 
         iup_clause_op, iup_params_op = build_iup_clause(iup_filter, "op")
         iup_clause_s, iup_params_s = build_iup_clause(iup_filter, "s")
@@ -724,13 +724,13 @@ def get_grade_class(ni, mgo, fe):
 
 def get_grade_roa(request):
     try:
-        iup_filter = request.GET.get("iup_id") or request.GET.get("iup_filter")
+        iup_filter  = request.GET.get("iup_id") or request.GET.get("iup_filter")
         filter_type = request.GET.get("filter_type")
-        year = request.GET.get("year")
-        month = request.GET.get("month")
-        week = request.GET.get("week")
-        date_start = request.GET.get("date_start")
-        date_end = request.GET.get("date_end")
+        year        = request.GET.get("year")
+        month       = request.GET.get("month")
+        week        = request.GET.get("week")
+        date_start  = request.GET.get("date_start")
+        date_end    = request.GET.get("date_end")
         filter_date = request.GET.get("filter_date")
 
         where_clause = "WHERE 1=1"
@@ -849,18 +849,18 @@ def get_grade_roa(request):
 
         for row in result:
             row["total_ore"] = round(float(row["total_ore"] or 0), 1)
-            row["released"] = round(float(row["released"] or 0), 1)
-            row["ni"] = round(float(row["ni"] or 0), 2)
-            row["co"] = round(float(row["co"] or 0), 2)
-            row["al2o3"] = round(float(row["al2o3"] or 0), 2)
-            row["cao"] = round(float(row["cao"] or 0), 2)
-            row["cr2o3"] = round(float(row["cr2o3"] or 0), 2)
-            row["fe"] = round(float(row["fe"] or 0), 2)
-            row["mgo"] = round(float(row["mgo"] or 0), 2)
-            row["sio2"] = round(float(row["sio2"] or 0), 2)
-            row["mc"] = round(float(row["mc"] or 0), 2)
-            row["sm"] = round(float(row["sm"] or 0), 2)
-            row["grade"] = get_grade_class(row["ni"], row["mgo"], row["fe"])
+            row["released"]  = round(float(row["released"] or 0), 1)
+            row["ni"]        = round(float(row["ni"] or 0), 2)
+            row["co"]        = round(float(row["co"] or 0), 2)
+            row["al2o3"]     = round(float(row["al2o3"] or 0), 2)
+            row["cao"]       = round(float(row["cao"] or 0), 2)
+            row["cr2o3"]     = round(float(row["cr2o3"] or 0), 2)
+            row["fe"]        = round(float(row["fe"] or 0), 2)
+            row["mgo"]       = round(float(row["mgo"] or 0), 2)
+            row["sio2"]      = round(float(row["sio2"] or 0), 2)
+            row["mc"]        = round(float(row["mc"] or 0), 2)
+            row["sm"]        = round(float(row["sm"] or 0), 2)
+            row["grade"]     = get_grade_class(row["ni"], row["mgo"], row["fe"])
 
         return JsonResponse({
             "data": result,

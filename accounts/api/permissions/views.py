@@ -22,7 +22,7 @@ class PermissionTreeView(APIView):
             "master",
             "mining",
             "selling",
-            # "tenants",
+            "analytics",
         }
 
         perms = Permission.objects.select_related(

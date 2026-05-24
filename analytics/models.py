@@ -1,6 +1,8 @@
 import uuid
 from django.db import models
 from config import settings
+from .models_bod_weekly import *
+from .models_ai import *
 
 # Create your models here.
 class ExportJob(models.Model):

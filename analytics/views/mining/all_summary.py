@@ -371,7 +371,6 @@ def generate_summary(df, label):
         'achievement_non_ore': float(safe_div(df['total_non_ore'].sum(), df['total_non_ore_plan'].sum())),
     }
 
-
 def get_summary_mines(request):
     iup_filter   = request.GET.get("iup_id")
     filter_type  = request.GET.get("filter_type", "all")
