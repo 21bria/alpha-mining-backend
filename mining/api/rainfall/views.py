@@ -22,7 +22,7 @@ from analytics.models import ExportJob
 from analytics.tasks import run_export_job
 
 class RainfallViewSet(BaseViewSet):
-    queryset = Rainfall.objects.select_related("iup").all().order_by("date")
+    queryset = Rainfall.objects.select_related("iup").all().order_by("-date")
     serializer_class = RainfallSerializer
     permission_classes = [
         IsAuthenticated,

@@ -23,7 +23,7 @@ from analytics.models import ExportJob
 from analytics.tasks import run_export_job
 
 class WeatherViewSet(BaseViewSet):
-    queryset = Weather.objects.select_related("iup").all().order_by("date")
+    queryset = Weather.objects.select_related("iup").all().order_by("-date")
     serializer_class = WeatherSerializer
     permission_classes = [
         IsAuthenticated,

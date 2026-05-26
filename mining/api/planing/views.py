@@ -22,7 +22,7 @@ from analytics.models import ExportJob
 from analytics.tasks import run_export_job
 
 class planProductionsViewSet(BaseViewSet):
-    queryset = planProductions.objects.select_related("iup").all().order_by("date_plan")
+    queryset = planProductions.objects.select_related("iup").all().order_by("-date_plan")
     serializer_class = planProductionsSerializer
     permission_classes = [
         IsAuthenticated,

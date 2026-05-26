@@ -28,7 +28,7 @@ from .serializers import FuelConsumptionSerializer
 from .filters import FuelFilter
 
 class FuelConsumptionViewSet(BaseViewSet):
-    queryset = FuelConsumptionView.objects.all().order_by("date")
+    queryset = FuelConsumptionView.objects.all().order_by("-date")
     serializer_class = FuelConsumptionSerializer
     permission_classes = [
         IsAuthenticated,
