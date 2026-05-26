@@ -10,7 +10,7 @@ from analytics.api.sample_crm.views_mral import sampleCrmMralviewSet
 from analytics.api.sample_duplicated.views import sampleDupRoaviewSet
 from analytics.api.sample_duplicated.views_mral import sampleDupMralviewSet
 
-from analytics.api.bod_weekly.views import BodWeeklyReportViewSet,BodWeeklyDocumentViewSet
+from analytics.api.bod_weekly.views import BodWeeklyReportViewSet,BodWeeklyDocumentViewSet,WeeklyReportViewSet
 
 
 router = DefaultRouter()
@@ -20,6 +20,8 @@ router.register(r"sample-crm-mral", sampleCrmMralviewSet, basename="sample-crm-m
 
 router.register(r"sample-duplicated-roa", sampleDupRoaviewSet, basename="sample-duplicated-roa")
 router.register(r"sample-duplicated-mral", sampleDupMralviewSet, basename="sample-duplicated-mral")
+
+router.register(r"weekly-report",WeeklyReportViewSet,basename="weekly-report")
 
 router.register(r"bod-weekly-report",BodWeeklyReportViewSet,basename="bod-weekly-report")
 
