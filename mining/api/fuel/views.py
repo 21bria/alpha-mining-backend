@@ -156,7 +156,7 @@ class FuelConsumptionViewCRUDSet(BaseViewSet):
             settings.BASE_DIR,
             "imports",
             "templates",
-            "geology_ore_import_template.xlsx",
+            "mining_fuel_transpose_import_template.xlsx",
         )
 
         if not os.path.exists(file_path):
@@ -168,7 +168,7 @@ class FuelConsumptionViewCRUDSet(BaseViewSet):
         return FileResponse(
             open(file_path, "rb"),
             as_attachment=True,
-            filename="geology_ore_import_template.xlsx",
+            filename="mining_fuel_transpose_import_template.xlsx",
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
   
