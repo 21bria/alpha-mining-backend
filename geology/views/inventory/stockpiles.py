@@ -12,183 +12,243 @@ def f2(v):
     return Decimal(v).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
 
 
-class NaNEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, float) and (obj != obj):  # Memeriksa NaN
-            return None
-        return super().default(obj)
+def fetch_all_as_dict(query, params):
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-def to_float1(v):
-    return round(float(v or 0), 1)
+def fetch_one_value(query, params):
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
 
-# Stockpile
+def convert_numeric_fields(rows, numeric_fields):
+    for item in rows:
+        for field in numeric_fields:
+            if field in item and item[field] is not None:
+                item[field] = float(item[field])
+    return rows
+ 
+def build_inventory_raw_filters(request, forced_material=None):
+    iup_filter = request.GET.get("iup_id")
+    # material_filter = request.GET.get("material")
+    material_filter = forced_material or request.GET.get("material")
+    area_filter = request.GET.get("areaFilter")
+    point_filter = request.GET.getlist("pointFilter")
+    cut_date = request.GET.get("date") or request.GET.get("cut_date")
+
+    if not iup_filter:
+        return None, None, None, JsonResponse({"error": "iup_id wajib diisi"}, status=400)
+
+    if not cut_date:
+        return None, None, None, JsonResponse({"error": "cut_date wajib diisi"}, status=400)
+
+    prod_conditions = [
+        "p.status_dome != 'Finished'",
+        "p.direct = 'No'",
+        "p.tgl_production <= %s",
+        "p.iup_id = %s",
+    ]
+    sell_conditions = [
+        "s.date_barge_out <= %s",
+        "s.status_barging = 'Complete'",
+        "s.iup_id = %s",
+    ]
+
+    prod_params = [cut_date, iup_filter]
+    sell_params = [cut_date, iup_filter]
+
+    sale_mapping = {
+        "LIM": "HPAL",
+        "SAP": "RKEF",
+    }
+
+    if material_filter not in [None, ""]:
+        mapped_sale = sale_mapping.get(material_filter, material_filter)
+        prod_conditions.append("p.sale_adjust = %s")
+        prod_params.append(mapped_sale)
+
+    if area_filter not in [None, ""]:
+        prod_conditions.append("TRIM(p.stockpile) = %s")
+        prod_params.append(area_filter)
+
+        sell_conditions.append("TRIM(s.stockpile) = %s")
+        sell_params.append(area_filter)
+
+    if point_filter:
+        placeholders = ", ".join(["%s"] * len(point_filter))
+
+        prod_conditions.append(f"TRIM(p.pile_id) IN ({placeholders})")
+        prod_params.extend(point_filter)
+
+        sell_conditions.append(f"TRIM(s.dome) IN ({placeholders})")
+        sell_params.extend(point_filter)
+
+    prod_where = "WHERE " + " AND ".join(prod_conditions)
+    sell_where = "WHERE " + " AND ".join(sell_conditions)
+
+    return prod_where, sell_where, prod_params + sell_params, None
+
 # Stockpile
 def get_inventory_stockpile(request):
-    iup_filter = request.GET.get('iup_id')
-    sale_filter = request.GET.get('material')
-    area_filter = request.GET.getlist('sampling_area')     # multi
-
-    # ================= PAGINATION =================
-    page = int(request.GET.get('page', 1))
+    page = int(request.GET.get("page", 1))
     per_page = 100
     offset = (page - 1) * per_page
 
-    if not iup_filter:
-        return JsonResponse({'error': 'iup_id wajib diisi'}, status=400)
+    prod_where, sell_where, params, error_response = build_inventory_raw_filters(request)
+    if error_response:
+        return error_response
 
-    # ================= FILTER =================
-    filters = ["t1.iup_id = %s"]
-    params = [iup_filter]
+    selling_case = """
+        CASE
+            WHEN p.nama_material = 'LIM' AND s.nama_material = 'SAP' THEN s.tonnage
+            WHEN p.nama_material = 'SAP' AND s.nama_material = 'LIM' THEN s.tonnage
+            WHEN p.nama_material = s.nama_material THEN s.tonnage
+            ELSE 0
+        END
+    """
 
-    sale_mapping = {
-        'LIM': 'HPAL',
-        'SAP': 'RKEF',
-    }
-
-    if sale_filter:
-        mapped_sale = sale_mapping.get(sale_filter.upper(), sale_filter)
-        filters.append("t1.sale_adjust = %s")
-        params.append(mapped_sale)
-
-    if area_filter:
-        filters.append(
-            f"t1.stockpile IN ({', '.join(['%s'] * len(area_filter))})"
-        )
-        params.extend(area_filter)
-
-    where_clause = " AND " + " AND ".join(filters) if filters else ""
-
-    # ================= QUERY =================
-    query = f"""
-        WITH base_dome AS (
-            -- ================= LEVEL DOME =================
+    base_query = f"""
+        WITH prod AS (
             SELECT
-                t1.iup_id,
-                t1.stockpile,
-                t1.pile_id,
-                t1.nama_material,
-                t1.total_ore::numeric AS tonnage,
-                t1.released::numeric AS released,
-                COALESCE(
-                    CASE
-                        WHEN t1.nama_material = t2.material THEN t2.tonnage
-                        WHEN t1.nama_material = 'LIM' AND t2.material = 'SAP' THEN t2.tonnage
-                        WHEN t1.nama_material = 'SAP' AND t2.material = 'LIM' THEN t2.tonnage
-                        ELSE 0
-                    END, 0
-                )::numeric AS selling,
-
-                -- ===== WEIGHTED NUMERATOR (PAKAI BALANCE) =====
-                (t1.Ni::numeric    * (t1.total_ore - COALESCE(t2.tonnage,0))) AS ni_w,
-                (t1.Co::numeric    * (t1.total_ore - COALESCE(t2.tonnage,0))) AS co_w,
-                (t1.Al2O3::numeric * (t1.total_ore - COALESCE(t2.tonnage,0))) AS al2o3_w,
-                (t1.CaO::numeric   * (t1.total_ore - COALESCE(t2.tonnage,0))) AS cao_w,
-                (t1.Cr2O3::numeric * (t1.total_ore - COALESCE(t2.tonnage,0))) AS cr2o3_w,
-                (t1.Fe::numeric    * (t1.total_ore - COALESCE(t2.tonnage,0))) AS fe_w,
-                (t1.Mgo::numeric   * (t1.total_ore - COALESCE(t2.tonnage,0))) AS mgo_w,
-                (t1.SiO2::numeric  * (t1.total_ore - COALESCE(t2.tonnage,0))) AS sio2_w,
-                (t1.MC::numeric    * (t1.total_ore - COALESCE(t2.tonnage,0))) AS mc_w
-            FROM view_inventory_by_dome t1
-            LEFT JOIN view_selling_by_dome t2
-                ON t2.iup_id = t1.iup_id
-                AND t2.stockpile = t1.stockpile
-                AND t2.dome = t1.pile_id
-            WHERE t1.status_dome != 'Finished'
-            {where_clause}
+                p.iup_id,
+                TRIM(p.stockpile) AS stockpile,
+                TRIM(p.pile_id) AS pile_id,
+                TRIM(p.nama_material) AS nama_material,
+                SUM(p.tonnage) AS total_ore,
+                SUM(CASE WHEN p.roa_ni IS NOT NULL AND p.sample_number IS NOT NULL THEN p.tonnage ELSE 0 END) AS released,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_ni) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_ni IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS ni,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_co) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_co IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS co,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_al2o3) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_al2o3 IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS al2o3,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_cao) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_cao IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS cao,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_cr2o3) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_cr2o3 IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS cr2o3,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_fe) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_fe IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS fe,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_mgo) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_mgo IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS mgo,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_sio2) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_sio2 IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS sio2,
+                ROUND(COALESCE(SUM(p.tonnage * p.roa_mc) / NULLIF(SUM(CASE WHEN p.sample_number IS NOT NULL AND p.roa_mc IS NOT NULL THEN p.tonnage ELSE 0 END), 0), 0)::numeric, 2) AS mc
+            FROM view_geology_ore_details_roa p
+            {prod_where}
+            GROUP BY p.iup_id, p.stockpile, p.pile_id, p.nama_material
+        ),
+        sell AS (
+            SELECT
+                s.iup_id,
+                TRIM(s.stockpile) AS stockpile,
+                TRIM(s.dome) AS pile_id,
+                TRIM(s.material) AS nama_material,
+                SUM(s.tonnage) AS tonnage
+            FROM view_selling_details s
+            {sell_where}
+            GROUP BY s.iup_id, s.stockpile, s.dome, s.material
+        ),
+        dome_calc AS (
+            SELECT
+                p.iup_id,
+                p.stockpile,
+                p.pile_id,
+                p.nama_material,
+                p.total_ore,
+                p.released,
+                COALESCE(SUM({selling_case}), 0) AS total_selling,
+                p.total_ore - COALESCE(SUM({selling_case}), 0) AS balance,
+                p.ni, p.co, p.al2o3, p.cao, p.cr2o3,
+                p.fe, p.mgo, p.sio2, p.mc
+            FROM prod p
+            LEFT JOIN sell s
+                ON s.iup_id = p.iup_id
+               AND s.stockpile = p.stockpile
+               AND s.pile_id = p.pile_id
+            GROUP BY
+                p.iup_id, p.stockpile, p.pile_id, p.nama_material,
+                p.total_ore, p.released,
+                p.ni, p.co, p.al2o3, p.cao, p.cr2o3,
+                p.fe, p.mgo, p.sio2, p.mc
         ),
         stockpile_agg AS (
-            -- ================= LEVEL STOCKPILE =================
             SELECT
                 iup_id,
                 stockpile,
                 nama_material,
-                SUM(tonnage) AS total_ore,
-                SUM(released) AS total_released,
-                SUM(selling) AS total_selling,
-                SUM(tonnage - selling) AS balance,
-                -- FINAL WEIGHTED AVERAGE
-                SUM(ni_w)    / NULLIF(SUM(tonnage - selling), 0) AS ni,
-                SUM(co_w)    / NULLIF(SUM(tonnage - selling), 0) AS co,
-                SUM(al2o3_w) / NULLIF(SUM(tonnage - selling), 0) AS al2o3,
-                SUM(cao_w)   / NULLIF(SUM(tonnage - selling), 0) AS cao,
-                SUM(cr2o3_w) / NULLIF(SUM(tonnage - selling), 0) AS cr2o3,
-                SUM(fe_w)    / NULLIF(SUM(tonnage - selling), 0) AS fe,
-                SUM(mgo_w)   / NULLIF(SUM(tonnage - selling), 0) AS mgo,
-                SUM(sio2_w)  / NULLIF(SUM(tonnage - selling), 0) AS sio2,
-                SUM(mc_w)    / NULLIF(SUM(tonnage - selling), 0) AS mc,
-                -- SM RATIO
-                SUM(sio2_w) / NULLIF(SUM(mgo_w), 0) AS sm
-            FROM base_dome
+                ROUND(SUM(total_ore)::numeric, 2) AS total_ore,
+                ROUND(SUM(released)::numeric, 2) AS total_released,
+                ROUND(SUM(total_selling)::numeric, 2) AS total_selling,
+                ROUND(SUM(balance)::numeric, 2) AS balance,
+                ROUND(COALESCE(SUM(balance * ni) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS ni,
+                ROUND(COALESCE(SUM(balance * co) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS co,
+                ROUND(COALESCE(SUM(balance * al2o3) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS al2o3,
+                ROUND(COALESCE(SUM(balance * cao) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS cao,
+                ROUND(COALESCE(SUM(balance * cr2o3) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS cr2o3,
+                ROUND(COALESCE(SUM(balance * fe) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS fe,
+                ROUND(COALESCE(SUM(balance * mgo) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS mgo,
+                ROUND(COALESCE(SUM(balance * sio2) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS sio2,
+                ROUND(COALESCE(SUM(balance * mc) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS mc,
+                ROUND(COALESCE(
+                    (SUM(balance * sio2) / NULLIF(SUM(balance), 0)) /
+                    NULLIF((SUM(balance * mgo) / NULLIF(SUM(balance), 0)), 0),
+                0)::numeric, 2) AS sm
+            FROM dome_calc
             GROUP BY iup_id, stockpile, nama_material
         )
+    """
+
+    data_query = base_query + """
         SELECT *
         FROM stockpile_agg
         ORDER BY stockpile, nama_material
         LIMIT %s OFFSET %s
     """
 
-    with connection.cursor() as cursor:
-        cursor.execute(query, params + [per_page, offset])
-        columns = [c[0] for c in cursor.description]
-        data = [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-    # ================= COUNT =================
-    count_query = f"""
-        SELECT COUNT(*)
-        FROM (
-            SELECT iup_id, stockpile, nama_material
-            FROM view_inventory_by_dome t1
-            WHERE t1.status_dome != 'Finished'
-            {where_clause}
-            GROUP BY iup_id, stockpile, nama_material
-        ) x
+    count_query = base_query + """
+        SELECT COUNT(*) FROM stockpile_agg
     """
 
-    with connection.cursor() as cursor:
-        cursor.execute(count_query, params)
-        total_data = cursor.fetchone()[0]
+    summary_query = base_query + """
+        SELECT
+            COALESCE(ROUND(SUM(total_ore)::numeric, 2), 0) AS total_ore,
+            COALESCE(ROUND(SUM(total_released)::numeric, 2), 0) AS total_released,
+            COALESCE(ROUND(SUM(total_selling)::numeric, 2), 0) AS total_selling,
+            COALESCE(ROUND(SUM(balance)::numeric, 2), 0) AS total_balance,
+            ROUND(COALESCE(SUM(balance * ni) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_ni,
+            ROUND(COALESCE(SUM(balance * co) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_co,
+            ROUND(COALESCE(SUM(balance * al2o3) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_al2o3,
+            ROUND(COALESCE(SUM(balance * cao) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_cao,
+            ROUND(COALESCE(SUM(balance * cr2o3) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_cr2o3,
+            ROUND(COALESCE(SUM(balance * fe) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_fe,
+            ROUND(COALESCE(SUM(balance * mgo) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_mgo,
+            ROUND(COALESCE(SUM(balance * sio2) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_sio2,
+            ROUND(COALESCE(SUM(balance * mc) / NULLIF(SUM(balance), 0), 0)::numeric, 2) AS avg_mc,
+            ROUND(COALESCE(
+                (SUM(balance * sio2) / NULLIF(SUM(balance), 0)) /
+                NULLIF((SUM(balance * mgo) / NULLIF(SUM(balance), 0)), 0),
+            0)::numeric, 2) AS avg_sm
+        FROM stockpile_agg
+    """
 
-    # ================= POST PROCESS =================
-    for row in data:
-        for k in row:
-            if isinstance(row[k], Decimal):
-                row[k] = float(row[k])
+    total_data = fetch_one_value(count_query, params)
+    data = fetch_all_as_dict(data_query, params + [per_page, offset])
+    summary = fetch_all_as_dict(summary_query, params)[0]
 
-    # ================= SUMMARY =================
-    total_balance = sum(i['balance'] for i in data)
+    numeric_fields = [
+        "total_ore", "total_released", "total_selling", "balance",
+        "ni", "co", "al2o3", "cao", "cr2o3",
+        "fe", "mgo", "sio2", "mc", "sm"
+    ]
 
-    def wavg(field):
-        return (
-            sum(i[field] * i['balance'] for i in data) / total_balance
-            if total_balance else 0
-        )
+    data = convert_numeric_fields(data, numeric_fields)
+    summary = convert_numeric_fields([summary], [
+        "total_ore", "total_released", "total_selling", "total_balance",
+        "avg_ni", "avg_co", "avg_al2o3", "avg_cao", "avg_cr2o3",
+        "avg_fe", "avg_mgo", "avg_sio2", "avg_mc", "avg_sm"
+    ])[0]
 
-    summary = {
-        'total_ore': sum(i['total_ore'] for i in data),
-        'total_released': sum(i['total_released'] for i in data),
-        'total_selling': sum(i['total_selling'] for i in data),
-        'total_balance': total_balance,
-        'avg_ni': wavg('ni'),
-        'avg_co': wavg('co'),
-        'avg_al2o3': wavg('al2o3'),
-        'avg_cao': wavg('cao'),
-        'avg_cr2o3': wavg('cr2o3'),
-        'avg_fe': wavg('fe'),
-        'avg_mgo': wavg('mgo'),
-        'avg_sio2': wavg('sio2'),
-        'avg_mc': wavg('mc'),
-    }
-
-    summary['sm_ratio'] = summary['avg_sio2'] / summary['avg_mgo'] if summary['avg_mgo'] else 0
-
-    # ================= RESPONSE =================
     return JsonResponse({
-        'data': data,
-        'summary': summary,
-        'pagination': {
-            'more': len(data) == per_page,
-            'current_page': page,
-            'total_pages': (total_data // per_page) + (1 if total_data % per_page else 0),
-            'total_data': total_data
+        "data": data,
+        "summary": summary,
+        "pagination": {
+            "more": len(data) == per_page,
+            "current_page": page,
+            "total_pages": (total_data // per_page) + (1 if total_data % per_page else 0),
+            "total_data": total_data
         }
     })

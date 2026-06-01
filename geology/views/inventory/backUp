@@ -1,0 +1,119 @@
+
+# def get_data_inventory(request):
+#     page = int(request.GET.get('page', 1))
+#     per_page = 100
+#     offset = (page - 1) * per_page
+
+#     where_clause, params, error_response = build_inventory_filters(request)
+#     if error_response:
+#         return error_response
+
+#     count_query = f"""
+#         SELECT COUNT(*)
+#         FROM (
+#             SELECT
+#                 t1.iup_id,
+#                 t1.iup_code,
+#                 t1.stockpile,
+#                 t1.pile_id
+#             FROM view_inventory_by_dome AS t1
+#             LEFT JOIN view_selling_by_dome AS t2
+#                 ON t2.iup_id = t1.iup_id
+#                 AND t2.stockpile = t1.stockpile
+#                 AND t2.dome = t1.pile_id
+#             {where_clause}
+#             GROUP BY
+#                 t1.iup_id, t1.iup_code, t1.stockpile, t1.pile_id,
+#                 t1.total_ore, t1.released, t1.nama_material,
+#                 t1.ni, t1.co, t1.al2o3, t1.cao, t1.cr2o3,
+#                 t1.fe, t1.mgo, t1.sio2, t1.mc, t1.sm
+#         ) AS sub
+#     """
+#     total_data = fetch_one_value(count_query, params)
+
+#     data_query = f"""
+#         SELECT
+#             t1.iup_id,
+#             t1.iup_code,
+#             t1.stockpile,
+#             t1.pile_id,
+#             t1.total_ore,
+#             t1.released,
+#             t1.nama_material,
+#             COALESCE(
+#                 ROUND(SUM(
+#                     CASE
+#                         WHEN t1.nama_material = 'LIM' AND t2.material = 'SAP' THEN t2.tonnage
+#                         WHEN t1.nama_material = 'SAP' AND t2.material = 'LIM' THEN t2.tonnage
+#                         WHEN t1.nama_material = t2.material THEN t2.tonnage
+#                         ELSE 0
+#                     END
+#                 )::numeric, 2),
+#             0) AS total_selling,
+#             ROUND((
+#                 t1.total_ore - COALESCE(SUM(
+#                     CASE
+#                         WHEN t1.nama_material = 'LIM' AND t2.material = 'SAP' THEN t2.tonnage
+#                         WHEN t1.nama_material = 'SAP' AND t2.material = 'LIM' THEN t2.tonnage
+#                         WHEN t1.nama_material = t2.material THEN t2.tonnage
+#                         ELSE 0
+#                     END
+#                 ), 0)
+#             )::numeric, 2) AS balance,
+#             t1.ni,
+#             t1.co,
+#             t1.al2o3,
+#             t1.cao,
+#             t1.cr2o3,
+#             t1.fe,
+#             t1.mgo,
+#             t1.sio2,
+#             t1.mc,
+#             t1.sm
+#         FROM view_inventory_by_dome AS t1
+#         LEFT JOIN view_selling_by_dome AS t2
+#             ON t2.iup_id = t1.iup_id
+#             AND t2.stockpile = TRIM(t1.stockpile)
+#             AND t2.dome = TRIM(t1.pile_id)
+#         {where_clause}
+#         GROUP BY
+#             t1.iup_id,
+#             t1.iup_code,
+#             t1.stockpile,
+#             t1.pile_id,
+#             t1.total_ore,
+#             t1.released,
+#             t1.nama_material,
+#             t1.ni,
+#             t1.co,
+#             t1.al2o3,
+#             t1.cao,
+#             t1.cr2o3,
+#             t1.fe,
+#             t1.mgo,
+#             t1.sio2,
+#             t1.mc,
+#             t1.sm
+#         ORDER BY t1.nama_material ASC, t1.stockpile ASC
+#         LIMIT %s OFFSET %s
+#     """
+#     sql_data = fetch_all_as_dict(data_query, params + [per_page, offset])
+
+#     numeric_fields = [
+#         'total_ore', 'released', 'total_selling', 'balance',
+#         'ni', 'co', 'al2o3', 'cao', 'cr2o3', 'fe', 'mgo', 'sio2', 'mc', 'sm'
+#     ]
+#     sql_data = convert_numeric_fields(sql_data, numeric_fields)
+
+#     summary = build_summary(sql_data)
+
+#     return JsonResponse({
+#         'data': sql_data,
+#         'summary': summary,
+#         'pagination': {
+#             'more': len(sql_data) == per_page,
+#             'total_pages': (total_data // per_page) + (1 if total_data % per_page > 0 else 0),
+#             'current_page': page,
+#             'total_data': total_data
+#         }
+#     })
