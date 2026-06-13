@@ -230,21 +230,18 @@ def get_summary_dataframe(where_actual, where_plan, group_actual, group_plan, pa
         WITH actual AS (
             SELECT
                 {group_actual} AS periode,
-                SUM(CASE WHEN nama_material = 'Top Soil' THEN tonnage ELSE 0 END)::numeric AS topsoil,
-                SUM(CASE WHEN nama_material = 'OB' THEN tonnage ELSE 0 END)::numeric AS ob,
-                SUM(CASE WHEN nama_material = 'Waste' THEN tonnage ELSE 0 END)::numeric AS waste,
-                SUM(CASE WHEN nama_material = 'Quarry' THEN tonnage ELSE 0 END)::numeric AS quarry,
-                SUM(CASE WHEN nama_material = 'Ballast' THEN tonnage ELSE 0 END)::numeric AS ballast,
-                SUM(CASE WHEN nama_material = 'Biomass' THEN tonnage ELSE 0 END)::numeric AS biomass,
-                SUM(CASE WHEN nama_material = 'LGLO' THEN tonnage ELSE 0 END)::numeric AS lglo,
-                SUM(CASE WHEN nama_material = 'MGLO' THEN tonnage ELSE 0 END)::numeric AS mglo,
-                SUM(CASE WHEN nama_material = 'HGLO' THEN tonnage ELSE 0 END)::numeric AS hglo,
-                SUM(CASE WHEN nama_material = 'MWS' THEN tonnage ELSE 0 END)::numeric AS mws,
-                SUM(CASE WHEN nama_material = 'LGSO' THEN tonnage ELSE 0 END)::numeric AS lgso,
-                SUM(CASE WHEN nama_material = 'MGSO' THEN tonnage ELSE 0 END)::numeric AS mgso,
-                SUM(CASE WHEN nama_material = 'HGSO' THEN tonnage ELSE 0 END)::numeric AS hgso,
-                SUM(CASE WHEN nama_material = 'LIM' THEN tonnage ELSE 0 END)::numeric AS lim,
-                SUM(CASE WHEN nama_material = 'SAP' THEN tonnage ELSE 0 END)::numeric AS sap
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(categories_material, '')) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore,
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(categories_material, '')) <> 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore
             FROM view_mining_productions a
             WHERE {where_actual}
             GROUP BY {group_actual}
@@ -252,123 +249,78 @@ def get_summary_dataframe(where_actual, where_plan, group_actual, group_plan, pa
         plan AS (
             SELECT
                 {group_plan} AS periode,
-                SUM(topsoil)::numeric AS topsoil_plan,
-                SUM(ob)::numeric AS ob_plan,
-                SUM(waste)::numeric AS waste_plan,
-                SUM(quarry)::numeric AS quarry_plan,
-                SUM(ballast)::numeric AS ballast_plan,
-                SUM(biomass)::numeric AS biomass_plan,
-                SUM(lglo)::numeric AS lglo_plan,
-                SUM(mglo)::numeric AS mglo_plan,
-                SUM(hglo)::numeric AS hglo_plan,
-                SUM(mws)::numeric AS mws_plan,
-                SUM(lgso)::numeric AS lgso_plan,
-                SUM(mgso)::numeric AS mgso_plan,
-                SUM(hgso)::numeric AS hgso_plan,
-                SUM(lim)::numeric AS lim_plan,
-                SUM(sap)::numeric AS sap_plan
-            FROM mining_plan_productions p
+
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(categories_material, '')) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore_plan,
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(categories_material, '')) <> 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore_plan
+            FROM view_mining_plan_productions p
             WHERE {where_plan}
             GROUP BY {group_plan}
         )
+
         SELECT
             COALESCE(a.periode, p.periode) AS periode,
-            ROUND(COALESCE(a.topsoil, 0), 2) AS topsoil,
-            ROUND(COALESCE(p.topsoil_plan, 0), 2) AS topsoil_plan,
-            ROUND(COALESCE(a.ob, 0), 2) AS ob,
-            ROUND(COALESCE(p.ob_plan, 0), 2) AS ob_plan,
-            ROUND(COALESCE(a.waste, 0), 2) AS waste,
-            ROUND(COALESCE(p.waste_plan, 0), 2) AS waste_plan,
-            ROUND(COALESCE(a.quarry, 0), 2) AS quarry,
-            ROUND(COALESCE(p.quarry_plan, 0), 2) AS quarry_plan,
-            ROUND(COALESCE(a.ballast, 0), 2) AS ballast,
-            ROUND(COALESCE(p.ballast_plan, 0), 2) AS ballast_plan,
-            ROUND(COALESCE(a.biomass, 0), 2) AS biomass,
-            ROUND(COALESCE(p.biomass_plan, 0), 2) AS biomass_plan,
-            ROUND(COALESCE(a.lglo, 0), 2) AS lglo,
-            ROUND(COALESCE(p.lglo_plan, 0), 2) AS lglo_plan,
-            ROUND(COALESCE(a.mglo, 0), 2) AS mglo,
-            ROUND(COALESCE(p.mglo_plan, 0), 2) AS mglo_plan,
-            ROUND(COALESCE(a.hglo, 0), 2) AS hglo,
-            ROUND(COALESCE(p.hglo_plan, 0), 2) AS hglo_plan,
-            ROUND(COALESCE(a.mws, 0), 2) AS mws,
-            ROUND(COALESCE(p.mws_plan, 0), 2) AS mws_plan,
-            ROUND(COALESCE(a.lgso, 0), 2) AS lgso,
-            ROUND(COALESCE(p.lgso_plan, 0), 2) AS lgso_plan,
-            ROUND(COALESCE(a.mgso, 0), 2) AS mgso,
-            ROUND(COALESCE(p.mgso_plan, 0), 2) AS mgso_plan,
-            ROUND(COALESCE(a.hgso, 0), 2) AS hgso,
-            ROUND(COALESCE(p.hgso_plan, 0), 2) AS hgso_plan,
-            ROUND(COALESCE(a.lim, 0), 2) AS lim,
-            ROUND(COALESCE(p.lim_plan, 0), 2) AS lim_plan,
-            ROUND(COALESCE(a.sap, 0), 2) AS sap,
-            ROUND(COALESCE(p.sap_plan, 0), 2) AS sap_plan
+            ROUND(COALESCE(a.ore, 0), 2) AS ore,
+            ROUND(COALESCE(p.ore_plan, 0), 2) AS ore_plan,
+            ROUND(COALESCE(a.non_ore, 0), 2) AS non_ore,
+            ROUND(COALESCE(p.non_ore_plan, 0), 2) AS non_ore_plan
         FROM actual a
-        FULL OUTER JOIN plan p ON a.periode = p.periode
+        FULL OUTER JOIN plan p
+            ON a.periode = p.periode
         ORDER BY periode
     """
 
     with connection.cursor() as cursor:
-        print("WHERE ACTUAL:", where_actual)
-        print("WHERE PLAN:", where_plan)
-        print("PARAMS:", params)
         cursor.execute(query, params)
         data = cursor.fetchall()
 
     df = pd.DataFrame(data, columns=[
-        'periode', 'topsoil', 'topsoil_plan',
-        'ob', 'ob_plan', 'waste', 'waste_plan', 'quarry', 'quarry_plan',
-        'ballast', 'ballast_plan', 'biomass', 'biomass_plan',
-        'lglo', 'lglo_plan', 'mglo', 'mglo_plan', 'hglo', 'hglo_plan',
-        'mws', 'mws_plan', 'lgso', 'lgso_plan', 'mgso', 'mgso_plan', 'hgso', 'hgso_plan',
-        'lim', 'lim_plan', 'sap', 'sap_plan'
+        "periode",
+        "ore",
+        "ore_plan",
+        "non_ore",
+        "non_ore_plan",
     ])
 
     return df
 
 def generate_summary(df, label):
-    ore_cols = ['lglo', 'mglo', 'hglo', 'lgso', 'mgso', 'hgso', 'mws', 'lim', 'sap']
-    lim_cols = ['lglo', 'mglo', 'hglo', 'lim']
-    sap_cols = ['lgso', 'mgso', 'hgso', 'mws', 'sap']
-    non_ore_cols = ['topsoil', 'ob', 'waste', 'quarry', 'ballast', 'biomass']
+    df["total_ore"] = df["ore"]
+    df["total_ore_plan"] = df["ore_plan"]
 
-    ore_plan_cols = [f + '_plan' for f in ore_cols]
-    lim_plan_cols = [f + '_plan' for f in lim_cols]
-    sap_plan_cols = [f + '_plan' for f in sap_cols]
-    non_ore_plan_cols = [f + '_plan' for f in non_ore_cols]
+    df["total_non_ore"] = df["non_ore"]
+    df["total_non_ore_plan"] = df["non_ore_plan"]
 
-    df['total_ore'] = df[ore_cols].sum(axis=1)
-    df['total_ore_plan'] = df[ore_plan_cols].sum(axis=1)
-    df['total_limonite'] = df[lim_cols].sum(axis=1)
-    df['total_limonite_plan'] = df[lim_plan_cols].sum(axis=1)
-    df['total_saprolite'] = df[sap_cols].sum(axis=1)
-    df['total_saprolite_plan'] = df[sap_plan_cols].sum(axis=1)
-    df['total_non_ore'] = df[non_ore_cols].sum(axis=1)
-    df['total_non_ore_plan'] = df[non_ore_plan_cols].sum(axis=1)
-
-    df['total_actual'] = df['total_ore'] + df['total_non_ore']
-    df['total_plan'] = df['total_ore_plan'] + df['total_non_ore_plan']
+    df["total_actual"] = df["total_ore"] + df["total_non_ore"]
+    df["total_plan"] = df["total_ore_plan"] + df["total_non_ore_plan"]
 
     def safe_div(a, b):
         return round((a / b * 100), 0) if b > 0 else 0
 
     return {
-        'label': label,
-        'total_ore': float(round(df['total_ore'].sum(), 2)),
-        'total_ore_plan': float(round(df['total_ore_plan'].sum(), 2)),
-        'total_limonite': float(round(df['total_limonite'].sum(), 2)),
-        'total_limonite_plan': float(round(df['total_limonite_plan'].sum(), 2)),
-        'total_saprolite': float(round(df['total_saprolite'].sum(), 2)),
-        'total_saprolite_plan': float(round(df['total_saprolite_plan'].sum(), 2)),
-        'total_non_ore': float(round(df['total_non_ore'].sum(), 2)),
-        'total_non_ore_plan': float(round(df['total_non_ore_plan'].sum(), 2)),
-        'total_actual': float(round(df['total_actual'].sum(), 2)),
-        'total_plan': float(round(df['total_plan'].sum(), 2)),
-        'achievement': float(safe_div(df['total_actual'].sum(), df['total_plan'].sum())),
-        'achievement_ore': float(safe_div(df['total_ore'].sum(), df['total_ore_plan'].sum())),
-        'achievement_limonite': float(safe_div(df['total_limonite'].sum(), df['total_limonite_plan'].sum())),
-        'achievement_saprolite': float(safe_div(df['total_saprolite'].sum(), df['total_saprolite_plan'].sum())),
-        'achievement_non_ore': float(safe_div(df['total_non_ore'].sum(), df['total_non_ore_plan'].sum())),
+        "label": label,
+
+        "total_ore": float(round(df["total_ore"].sum(), 2)),
+        "total_ore_plan": float(round(df["total_ore_plan"].sum(), 2)),
+
+        "total_non_ore": float(round(df["total_non_ore"].sum(), 2)),
+        "total_non_ore_plan": float(round(df["total_non_ore_plan"].sum(), 2)),
+
+        "total_actual": float(round(df["total_actual"].sum(), 2)),
+        "total_plan": float(round(df["total_plan"].sum(), 2)),
+
+        "achievement": float(safe_div(df["total_actual"].sum(), df["total_plan"].sum())),
+        "achievement_ore": float(safe_div(df["total_ore"].sum(), df["total_ore_plan"].sum())),
+        "achievement_non_ore": float(safe_div(df["total_non_ore"].sum(), df["total_non_ore_plan"].sum())),
     }
 
 def get_summary_mines(request):
@@ -479,18 +431,17 @@ def get_chart_mining(request):
 
 def get_daily_chart(filter_date, iup_filter=None):
     where_actual = "mp.date_production = %s::date"
-    where_plan = "date_plan = %s::date"
+    where_plan = "p.date_plan = %s::date"
 
     actual_params = [filter_date]
     plan_params = [filter_date]
 
-    # filter iup
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
             placeholders = ",".join(["%s"] * len(iup_ids))
             where_actual += f" AND mp.iup_id IN ({placeholders})"
-            where_plan += f" AND iup_id IN ({placeholders})"
+            where_plan += f" AND p.iup_id IN ({placeholders})"
             actual_params += iup_ids
             plan_params += iup_ids
 
@@ -504,6 +455,7 @@ def get_daily_chart(filter_date, iup_filter=None):
                 END AS sort_order
             FROM generate_series(0, 23) AS hour_label
         ),
+
         hour_series AS (
             SELECT 
                 make_time(hour_label, 0, 0) AS raw_time,
@@ -512,34 +464,34 @@ def get_daily_chart(filter_date, iup_filter=None):
                 sort_order
             FROM working_hours
         ),
+
         agg_data AS (
             SELECT 
-                LPAD(t_load::text, 2, '0') AS t_load_time,
-                SUM(tonnage) AS total_tonnage
+                LPAD(mp.t_load::text, 2, '0') AS t_load_time,
+                SUM(mp.tonnage) AS total_tonnage
             FROM view_mining_productions mp
             WHERE {where_actual}
-            GROUP BY LPAD(t_load::text, 2, '0')
+            GROUP BY LPAD(mp.t_load::text, 2, '0')
         ),
+
         plan_per_hour AS (
             SELECT
-                ROUND((
-                    SUM(
-                        COALESCE(topsoil, 0) + COALESCE(ob, 0) + COALESCE(lglo, 0) + COALESCE(mglo, 0) +
-                        COALESCE(hglo, 0) + COALESCE(waste, 0) + COALESCE(mws, 0) + COALESCE(lgso, 0) +
-                        COALESCE(mgso, 0) + COALESCE(hgso, 0) + COALESCE(lim, 0) + COALESCE(sap, 0) +
-                        COALESCE(quarry, 0) + COALESCE(ballast, 0) + COALESCE(biomass, 0)
-                    ) / 22
-                )::numeric, 2) AS plan_data
-            FROM mining_plan_productions
+                ROUND(
+                    (COALESCE(SUM(p.tonnage), 0) / 22)::numeric,
+                    2
+                ) AS plan_data
+            FROM view_mining_plan_productions p
             WHERE {where_plan}
         )
+
         SELECT
             hs.hour_label AS id,
             hs.left_time,
             COALESCE(a.total_tonnage, 0)::numeric(10,2) AS total,
             COALESCE(p.plan_data, 0)::numeric(10,2) AS plan_data
         FROM hour_series hs
-        LEFT JOIN agg_data a ON hs.left_time = a.t_load_time
+        LEFT JOIN agg_data a
+            ON hs.left_time = a.t_load_time
         CROSS JOIN plan_per_hour p
         ORDER BY hs.sort_order;
     """
@@ -550,20 +502,39 @@ def get_daily_chart(filter_date, iup_filter=None):
         cursor.execute(query, params)
         data = cursor.fetchall()
 
-    df = pd.DataFrame(data, columns=["time", "left_time", "total", "plan_data"])
-    df["total"] = pd.to_numeric(df["total"], errors="coerce").fillna(0.0).round(2)
-    df["plan_data"] = pd.to_numeric(df["plan_data"], errors="coerce").fillna(0.0).round(2)
-    df["achievement"] = df.apply(
-        lambda r: round((r["total"] / r["plan_data"] * 100), 2) if r["plan_data"] > 0 else 0.0,
-        axis=1
+    df = pd.DataFrame(
+        data,
+        columns=["time", "left_time", "total", "plan_data"],
     )
 
-    return JsonResponse({
-        "x_data": df["left_time"].tolist(),
-        "total_actual": df["total"].tolist(),
-        "total_plan": df["plan_data"].tolist(),
-        "achievement": df["achievement"].tolist(),
-    }, safe=False)
+    df["total"] = (
+        pd.to_numeric(df["total"], errors="coerce")
+        .fillna(0.0)
+        .round(2)
+    )
+
+    df["plan_data"] = (
+        pd.to_numeric(df["plan_data"], errors="coerce")
+        .fillna(0.0)
+        .round(2)
+    )
+
+    df["achievement"] = df.apply(
+        lambda r: round((r["total"] / r["plan_data"] * 100), 2)
+        if r["plan_data"] > 0
+        else 0.0,
+        axis=1,
+    )
+
+    return JsonResponse(
+        {
+            "x_data": df["left_time"].tolist(),
+            "total_actual": df["total"].tolist(),
+            "total_plan": df["plan_data"].tolist(),
+            "achievement": df["achievement"].tolist(),
+        },
+        safe=False,
+    )
 
 def get_chart_ore_quality(request):
     iup_filter   = request.GET.get("iup_id")
@@ -576,19 +547,18 @@ def get_chart_ore_quality(request):
     return JsonResponse({"error": "Invalid filter"}, status=400)
 
 def get_daily_ore_chart(filter_date, iup_filter=None):
-    where_actual = "date_production = %s"
-    where_plan = "date_plan = %s"
+    where_actual = "mp.date_production = %s::date AND LOWER(COALESCE(mp.categories_material, '')) = 'ore'"
+    where_plan = "p.date_plan = %s::date AND LOWER(COALESCE(p.categories_material, '')) = 'ore'"
 
     actual_params = [filter_date]
     plan_params = [filter_date]
 
-    # FILTER IUP
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
             placeholders = ",".join(["%s"] * len(iup_ids))
-            where_actual += f" AND iup_id IN ({placeholders})"
-            where_plan += f" AND iup_id IN ({placeholders})"
+            where_actual += f" AND mp.iup_id IN ({placeholders})"
+            where_plan += f" AND p.iup_id IN ({placeholders})"
             actual_params += iup_ids
             plan_params += iup_ids
 
@@ -602,6 +572,7 @@ def get_daily_ore_chart(filter_date, iup_filter=None):
                 END AS sort_order
             FROM generate_series(0, 23) AS hour_label
         ),
+
         hour_series AS (
             SELECT 
                 make_time(hour_label, 0, 0) AS raw_time,
@@ -611,29 +582,22 @@ def get_daily_ore_chart(filter_date, iup_filter=None):
             FROM working_hours
         ),
 
-        -- ACTUAL (produksi)
         agg_actual AS (
             SELECT 
-                TO_CHAR(make_time(t_load::int, 0, 0), 'HH24') AS t_load_time,
-                 SUM(tonnage) AS total_tonnage
-            FROM view_mining_productions
+                TO_CHAR(make_time(mp.t_load::int, 0, 0), 'HH24') AS t_load_time,
+                SUM(mp.tonnage) AS total_tonnage
+            FROM view_mining_productions mp
             WHERE {where_actual}
-            GROUP BY t_load
+            GROUP BY mp.t_load
         ),
 
-        --PLAN (dipisah, tidak join langsung)
         agg_plan AS (
             SELECT 
-                ROUND((
-                    SUM(
-                        COALESCE(lglo, 0) + COALESCE(mglo, 0) +
-                        COALESCE(hglo, 0) + COALESCE(mws, 0) +
-                        COALESCE(lgso, 0) + COALESCE(mgso, 0) +
-                        COALESCE(hgso, 0) + COALESCE(lim, 0) +
-                        COALESCE(sap, 0)
-                    ) / 22
-                )::numeric, 2) AS plan_data
-            FROM mining_plan_productions
+                ROUND(
+                    (COALESCE(SUM(p.tonnage), 0) / 22)::numeric,
+                    2
+                ) AS plan_data
+            FROM view_mining_plan_productions p
             WHERE {where_plan}
         )
 
@@ -643,7 +607,8 @@ def get_daily_ore_chart(filter_date, iup_filter=None):
             COALESCE(a.total_tonnage, 0)::numeric(10,2) AS total,
             COALESCE(p.plan_data, 0)::numeric(10,2) AS plan_data
         FROM hour_series hs
-        LEFT JOIN agg_actual a ON hs.left_time = a.t_load_time
+        LEFT JOIN agg_actual a
+            ON hs.left_time = a.t_load_time
         CROSS JOIN agg_plan p
         ORDER BY hs.sort_order;
     """
@@ -660,16 +625,20 @@ def get_daily_ore_chart(filter_date, iup_filter=None):
 
     df["achievement"] = df.apply(
         lambda r: round((r["total"] / r["plan_data"] * 100), 2)
-        if r["plan_data"] > 0 else 0.0,
-        axis=1
+        if r["plan_data"] > 0
+        else 0.0,
+        axis=1,
     )
 
-    return JsonResponse({
-        "x_data": df["left_time"].tolist(),
-        "total_actual": df["total"].tolist(),
-        "total_plan": df["plan_data"].tolist(),
-        "achievement": df["achievement"].tolist(),
-    }, safe=False)
+    return JsonResponse(
+        {
+            "x_data": df["left_time"].tolist(),
+            "total_actual": df["total"].tolist(),
+            "total_plan": df["plan_data"].tolist(),
+            "achievement": df["achievement"].tolist(),
+        },
+        safe=False,
+    )
 
 # http://kawi.localhost:8000/api/analytics/raw/mining/chart/?filter_type=monthly&filter_year=2026&filter_month=3&iup_id=1
 def get_monthly_chart(filter_year, filter_month, iup_filter=None):
@@ -686,7 +655,6 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
     actual_params = [tgl_pertama, tgl_terakhir]
     plan_params = [tgl_pertama, tgl_terakhir]
 
-    # filter iup
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
@@ -696,7 +664,6 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
             actual_params += iup_ids
             plan_params += iup_ids
 
-    # params untuk generate_series + actual + plan
     params = [
         tgl_pertama, tgl_terakhir,
         *actual_params,
@@ -718,14 +685,8 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
         plan AS (
             SELECT 
                 date_plan::date AS date,
-                SUM(
-                    COALESCE(topsoil, 0) + COALESCE(ob, 0) + COALESCE(lglo, 0) + 
-                    COALESCE(mglo, 0) + COALESCE(hglo, 0) + COALESCE(waste, 0) + 
-                    COALESCE(mws, 0) + COALESCE(lgso, 0) + COALESCE(mgso, 0) + 
-                    COALESCE(hgso, 0) + COALESCE(lim, 0) + COALESCE(sap, 0) + 
-                    COALESCE(quarry, 0) + COALESCE(ballast, 0) + COALESCE(biomass, 0)
-                ) AS plan_data
-            FROM mining_plan_productions
+                SUM(tonnage) AS plan_data
+            FROM view_mining_plan_productions
             WHERE {where_plan}
             GROUP BY date_plan::date
         )
@@ -734,8 +695,10 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
             ROUND(COALESCE(a.tonnage, 0)::numeric, 2) AS total_tonnage,
             ROUND(COALESCE(p.plan_data, 0)::numeric, 2) AS total_plan
         FROM tanggal
-        LEFT JOIN actual a ON tanggal.date = a.date
-        LEFT JOIN plan p ON tanggal.date = p.date
+        LEFT JOIN actual a
+            ON tanggal.date = a.date
+        LEFT JOIN plan p
+            ON tanggal.date = p.date
         ORDER BY tanggal.date
     """
 
@@ -756,29 +719,29 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
 
 # http://kawi.localhost:8000/api/analytics/raw/mining/chart/?filter_type=weekly&filter_week=2025-04&iup_id=1
 def get_weekly_chart(filter_week, iup_filter=None):
-    iso_year, iso_week = map(int, filter_week.split('-'))
+    iso_year, iso_week = map(int, filter_week.split("-"))
 
     start_date = date.fromisocalendar(iso_year, iso_week, 1)
-    end_date   = date.fromisocalendar(iso_year, iso_week, 7)
+    end_date = date.fromisocalendar(iso_year, iso_week, 7)
 
-    where_actual = "TO_CHAR(date_production, 'IYYY-IW') = %s"
-    where_plan   = "TO_CHAR(date_plan, 'IYYY-IW') = %s"
+    where_actual = "date_production BETWEEN %s AND %s"
+    where_plan = "date_plan BETWEEN %s AND %s"
 
-    actual_params = [filter_week]
-    plan_params   = [filter_week]
+    actual_params = [start_date, end_date]
+    plan_params = [start_date, end_date]
 
-    # FILTER IUP
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
             placeholders = ",".join(["%s"] * len(iup_ids))
             where_actual += f" AND iup_id IN ({placeholders})"
-            where_plan   += f" AND iup_id IN ({placeholders})"
+            where_plan += f" AND iup_id IN ({placeholders})"
             actual_params += iup_ids
-            plan_params   += iup_ids
+            plan_params += iup_ids
 
     params = [
-        start_date, end_date,
+        start_date,
+        end_date,
         *actual_params,
         *plan_params,
     ]
@@ -790,193 +753,129 @@ def get_weekly_chart(filter_week, iup_filter=None):
         actual AS (
             SELECT
                 DATE(date_production) AS tanggal,
-                TO_CHAR(date_production, 'FMDy') AS nama_hari,
-                SUM(CASE WHEN nama_material = 'LGLO' THEN tonnage ELSE 0 END)::numeric AS lglo,
-                SUM(CASE WHEN nama_material = 'MGLO' THEN tonnage ELSE 0 END)::numeric AS mglo,
-                SUM(CASE WHEN nama_material = 'HGLO' THEN tonnage ELSE 0 END)::numeric AS hglo,
-                SUM(CASE WHEN nama_material = 'MWS' THEN tonnage ELSE 0 END)::numeric AS mws,
-                SUM(CASE WHEN nama_material = 'LGSO' THEN tonnage ELSE 0 END)::numeric AS lgso,
-                SUM(CASE WHEN nama_material = 'MGSO' THEN tonnage ELSE 0 END)::numeric AS mgso,
-                SUM(CASE WHEN nama_material = 'HGSO' THEN tonnage ELSE 0 END)::numeric AS hgso,
-                SUM(CASE WHEN nama_material = 'LIM' THEN tonnage ELSE 0 END)::numeric AS lim,
-                SUM(CASE WHEN nama_material = 'SAP' THEN tonnage ELSE 0 END)::numeric AS sap,
-                SUM(CASE WHEN nama_material = 'Top Soil' THEN tonnage ELSE 0 END)::numeric AS topsoil,
-                SUM(CASE WHEN nama_material = 'OB' THEN tonnage ELSE 0 END)::numeric AS ob,
-                SUM(CASE WHEN nama_material = 'Waste' THEN tonnage ELSE 0 END)::numeric AS waste,
-                SUM(CASE WHEN nama_material = 'Quarry' THEN tonnage ELSE 0 END)::numeric AS quarry,
-                SUM(CASE WHEN nama_material = 'Ballast' THEN tonnage ELSE 0 END)::numeric AS ballast,
-                SUM(CASE WHEN nama_material = 'Biomass' THEN tonnage ELSE 0 END)::numeric AS biomass
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore,
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore
             FROM view_mining_productions
             WHERE {where_actual}
-            GROUP BY DATE(date_production), TO_CHAR(date_production, 'FMDy')
+            GROUP BY DATE(date_production)
         ),
         plan AS (
             SELECT
                 DATE(date_plan) AS tanggal,
-                TO_CHAR(date_plan, 'FMDy') AS nama_hari,
-                SUM(lglo)::numeric AS lglo_plan,
-                SUM(mglo)::numeric AS mglo_plan,
-                SUM(hglo)::numeric AS hglo_plan,
-                SUM(mws)::numeric AS mws_plan,
-                SUM(lgso)::numeric AS lgso_plan,
-                SUM(mgso)::numeric AS mgso_plan,
-                SUM(hgso)::numeric AS hgso_plan,
-                SUM(lim)::numeric AS lim_plan,
-                SUM(sap)::numeric AS sap_plan,
-                SUM(topsoil)::numeric AS topsoil_plan,
-                SUM(ob)::numeric AS ob_plan,
-                SUM(waste)::numeric AS waste_plan,
-                SUM(quarry)::numeric AS quarry_plan,
-                SUM(ballast)::numeric AS ballast_plan,
-                SUM(biomass)::numeric AS biomass_plan
-            FROM mining_plan_productions
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore_plan,
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore_plan
+            FROM view_mining_plan_productions
             WHERE {where_plan}
-            GROUP BY DATE(date_plan), TO_CHAR(date_plan, 'FMDy')
+            GROUP BY DATE(date_plan)
         )
         SELECT
             TO_CHAR(hari.tanggal, 'YYYY-MM-DD') AS tanggal,
             TO_CHAR(hari.tanggal, 'FMDy') AS hari,
 
-            COALESCE(a.lglo, 0) AS lglo,
-            COALESCE(p.lglo_plan, 0) AS lglo_plan,
+            COALESCE(a.ore, 0)::numeric AS ore,
+            COALESCE(p.ore_plan, 0)::numeric AS ore_plan,
 
-            COALESCE(a.mglo, 0) AS mglo,
-            COALESCE(p.mglo_plan, 0) AS mglo_plan,
+            COALESCE(a.non_ore, 0)::numeric AS non_ore,
+            COALESCE(p.non_ore_plan, 0)::numeric AS non_ore_plan
 
-            COALESCE(a.hglo, 0) AS hglo,
-            COALESCE(p.hglo_plan, 0) AS hglo_plan,
-
-            COALESCE(a.mws, 0) AS mws,
-            COALESCE(p.mws_plan, 0) AS mws_plan,
-
-            COALESCE(a.lgso, 0) AS lgso,
-            COALESCE(p.lgso_plan, 0) AS lgso_plan,
-
-            COALESCE(a.mgso, 0) AS mgso,
-            COALESCE(p.mgso_plan, 0) AS mgso_plan,
-
-            COALESCE(a.hgso, 0) AS hgso,
-            COALESCE(p.hgso_plan, 0) AS hgso_plan,
-
-            COALESCE(a.lim, 0) AS lim,
-            COALESCE(p.lim_plan, 0) AS lim_plan,
-
-            COALESCE(a.sap, 0) AS sap,
-            COALESCE(p.sap_plan, 0) AS sap_plan,
-
-            COALESCE(a.topsoil, 0) AS topsoil,
-            COALESCE(p.topsoil_plan, 0) AS topsoil_plan,
-
-            COALESCE(a.ob, 0) AS ob,
-            COALESCE(p.ob_plan, 0) AS ob_plan,
-
-            COALESCE(a.waste, 0) AS waste,
-            COALESCE(p.waste_plan, 0) AS waste_plan,
-
-            COALESCE(a.quarry, 0) AS quarry,
-            COALESCE(p.quarry_plan, 0) AS quarry_plan,
-
-            COALESCE(a.ballast, 0) AS ballast,
-            COALESCE(p.ballast_plan, 0) AS ballast_plan,
-
-            COALESCE(a.biomass, 0) AS biomass,
-            COALESCE(p.biomass_plan, 0) AS biomass_plan
         FROM hari
-        LEFT JOIN actual a ON hari.tanggal = a.tanggal
-        LEFT JOIN plan p ON hari.tanggal = p.tanggal
+        LEFT JOIN actual a
+            ON hari.tanggal = a.tanggal
+        LEFT JOIN plan p
+            ON hari.tanggal = p.tanggal
         ORDER BY hari.tanggal
     """
-
-    # params = [filter_week, filter_week]
 
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         data = cursor.fetchall()
 
-        columns = [
-            'tanggal', 'hari',
-            'lglo', 'lglo_plan',
-            'mglo', 'mglo_plan',
-            'hglo', 'hglo_plan',
-            'mws', 'mws_plan',
-            'lgso', 'lgso_plan',
-            'mgso', 'mgso_plan',
-            'hgso', 'hgso_plan',
-            'lim', 'lim_plan',
-            'sap', 'sap_plan',
-            'topsoil', 'topsoil_plan',
-            'ob', 'ob_plan',
-            'waste', 'waste_plan',
-            'quarry', 'quarry_plan',
-            'ballast', 'ballast_plan',
-            'biomass', 'biomass_plan',
-    ]
-
-    df = pd.DataFrame(data, columns=columns)
-
-    metric_cols = [
-        'lglo', 'mglo', 'hglo', 'mws',
-        'lgso', 'mgso', 'hgso',
-        'lim', 'sap',
-        'topsoil', 'ob', 'waste',
-        'quarry', 'ballast', 'biomass'
-    ]
-
-    # pastikan numeric
-    for col in metric_cols:
-        plan_col = f"{col}_plan"
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df[plan_col] = pd.to_numeric(df[plan_col], errors='coerce').fillna(0)
-
-    # hitung achievement per kolom
-    for col in metric_cols:
-        plan_col = f"{col}_plan"
-        ach_col = f"{col}_ach"
-
-        df[ach_col] = df.apply(
-            lambda row: round((row[col] / row[plan_col]) * 100, 2) if row[plan_col] > 0 else 0,
-            axis=1
-        )
-
-    # kategori total
-    lim_cols = ['lglo', 'mglo', 'hglo', 'lim']
-    sap_cols = ['lgso', 'mgso', 'hgso', 'mws', 'sap']
-    non_ore_cols = ['topsoil', 'ob', 'waste', 'quarry', 'ballast', 'biomass']
-
-    lim_plan_cols = [f"{c}_plan" for c in lim_cols]
-    sap_plan_cols = [f"{c}_plan" for c in sap_cols]
-    non_ore_plan_cols = [f"{c}_plan" for c in non_ore_cols]
-
-    df['total_lim'] = df[lim_cols].sum(axis=1)
-    df['total_lim_plan'] = df[lim_plan_cols].sum(axis=1)
-
-    df['total_sap'] = df[sap_cols].sum(axis=1)
-    df['total_sap_plan'] = df[sap_plan_cols].sum(axis=1)
-
-    df['total_non_ore'] = df[non_ore_cols].sum(axis=1)
-    df['total_non_ore_plan'] = df[non_ore_plan_cols].sum(axis=1)
-
-    df['total_actual'] = df['total_lim'] + df['total_sap'] + df['total_non_ore']
-    df['total_plan'] = df['total_lim_plan'] + df['total_sap_plan'] + df['total_non_ore_plan']
-
-    df['total_achievement'] = df.apply(
-        lambda row: round((row['total_actual'] / row['total_plan']) * 100, 2) if row['total_plan'] > 0 else 0,
-        axis=1
+    df = pd.DataFrame(
+        data,
+        columns=[
+            "tanggal",
+            "hari",
+            "ore",
+            "ore_plan",
+            "non_ore",
+            "non_ore_plan",
+        ],
     )
 
-    df['limonite_ach']  = df.apply(lambda r: round((r['total_lim'] / r['total_lim_plan'] * 100), 2) if r['total_lim_plan'] > 0 else 0, axis=1)
-    df['saprolite_ach'] = df.apply(lambda r: round((r['total_sap'] / r['total_sap_plan'] * 100), 2) if r['total_sap_plan'] > 0 else 0, axis=1)
+    numeric_cols = [
+        "ore",
+        "ore_plan",
+        "non_ore",
+        "non_ore_plan",
+    ]
 
-    df['non_ore_ach']   = df.apply(lambda r: round((r['total_non_ore'] / r['total_non_ore_plan'] * 100), 2) if r['total_non_ore_plan'] > 0 else 0, axis=1)
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
+    df["total_actual"] = df["ore"] + df["non_ore"]
+    df["total_plan"] = df["ore_plan"] + df["non_ore_plan"]
 
-    return JsonResponse({
-        'x_data'        : df['hari'].astype(str).tolist(),
-        'total_actual' : df['total_actual'].round(1).tolist(),
-        'total_plan'   : df['total_plan'].round(1).tolist(),
-        'achievement'  : df['total_achievement'].round(1).tolist(),
-    }, safe=False)
+    df["achievement"] = df.apply(
+        lambda row: round((row["total_actual"] / row["total_plan"]) * 100, 2)
+        if row["total_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
+    df["achievement_ore"] = df.apply(
+        lambda row: round((row["ore"] / row["ore_plan"]) * 100, 2)
+        if row["ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
+
+    df["achievement_non_ore"] = df.apply(
+        lambda row: round((row["non_ore"] / row["non_ore_plan"]) * 100, 2)
+        if row["non_ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
+
+    return JsonResponse(
+        {
+            "x_data": df["hari"].astype(str).tolist(),
+
+            "total_actual": df["total_actual"].round(1).astype(float).tolist(),
+            "total_plan": df["total_plan"].round(1).astype(float).tolist(),
+            "achievement": df["achievement"].round(1).astype(float).tolist(),
+
+            "ore_actual": df["ore"].round(1).astype(float).tolist(),
+            "ore_plan": df["ore_plan"].round(1).astype(float).tolist(),
+            "ore_achievement": df["achievement_ore"].round(1).astype(float).tolist(),
+
+            "non_ore_actual": df["non_ore"].round(1).astype(float).tolist(),
+            "non_ore_plan": df["non_ore_plan"].round(1).astype(float).tolist(),
+            "non_ore_achievement": df["achievement_non_ore"].round(1).astype(float).tolist(),
+        },
+        safe=False,
+    )
 # http://kawi.localhost:8000/api/analytics/raw/mining/chart/?filter_type=range&date_start='2026-03-01'&date_end='2026-03-20'&iup_id=1
 def get_range_chart(date_start, date_end, iup_filter=None):
     where_actual = "date_production BETWEEN %s AND %s"
@@ -995,172 +894,147 @@ def get_range_chart(date_start, date_end, iup_filter=None):
             plan_params += iup_ids
 
     params = [
-        date_start, date_end,
+        date_start,
+        date_end,
         *actual_params,
         *plan_params,
     ]
 
     query = f"""
         WITH tanggal AS (
-            SELECT generate_series(%s::date, %s::date, interval '1 day') AS date
+            SELECT generate_series(%s::date, %s::date, interval '1 day') AS tanggal
         ),
+
         actual AS (
             SELECT
                 DATE(date_production) AS tanggal,
-                SUM(CASE WHEN nama_material = 'LGLO' THEN tonnage ELSE 0 END)::numeric AS lglo,
-                SUM(CASE WHEN nama_material = 'MGLO' THEN tonnage ELSE 0 END)::numeric AS mglo,
-                SUM(CASE WHEN nama_material = 'HGLO' THEN tonnage ELSE 0 END)::numeric AS hglo,
-                SUM(CASE WHEN nama_material = 'MWS' THEN tonnage ELSE 0 END)::numeric AS mws,
-                SUM(CASE WHEN nama_material = 'LGSO' THEN tonnage ELSE 0 END)::numeric AS lgso,
-                SUM(CASE WHEN nama_material = 'MGSO' THEN tonnage ELSE 0 END)::numeric AS mgso,
-                SUM(CASE WHEN nama_material = 'HGSO' THEN tonnage ELSE 0 END)::numeric AS hgso,
-                SUM(CASE WHEN nama_material = 'LIM' THEN tonnage ELSE 0 END)::numeric AS lim,
-                SUM(CASE WHEN nama_material = 'SAP' THEN tonnage ELSE 0 END)::numeric AS sap,
-                SUM(CASE WHEN nama_material = 'Top Soil' THEN tonnage ELSE 0 END)::numeric AS topsoil,
-                SUM(CASE WHEN nama_material = 'OB' THEN tonnage ELSE 0 END)::numeric AS ob,
-                SUM(CASE WHEN nama_material = 'Waste' THEN tonnage ELSE 0 END)::numeric AS waste,
-                SUM(CASE WHEN nama_material = 'Quarry' THEN tonnage ELSE 0 END)::numeric AS quarry,
-                SUM(CASE WHEN nama_material = 'Ballast' THEN tonnage ELSE 0 END)::numeric AS ballast,
-                SUM(CASE WHEN nama_material = 'Biomass' THEN tonnage ELSE 0 END)::numeric AS biomass
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore,
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore
+
             FROM view_mining_productions
             WHERE {where_actual}
             GROUP BY DATE(date_production)
         ),
+
         plan AS (
             SELECT
                 DATE(date_plan) AS tanggal,
-                SUM(lglo)::numeric AS lglo_plan,
-                SUM(mglo)::numeric AS mglo_plan,
-                SUM(hglo)::numeric AS hglo_plan,
-                SUM(mws)::numeric AS mws_plan,
-                SUM(lgso)::numeric AS lgso_plan,
-                SUM(mgso)::numeric AS mgso_plan,
-                SUM(hgso)::numeric AS hgso_plan,
-                SUM(lim)::numeric AS lim_plan,
-                SUM(sap)::numeric AS sap_plan,
-                SUM(topsoil)::numeric AS topsoil_plan,
-                SUM(ob)::numeric AS ob_plan,
-                SUM(waste)::numeric AS waste_plan,
-                SUM(quarry)::numeric AS quarry_plan,
-                SUM(ballast)::numeric AS ballast_plan,
-                SUM(biomass)::numeric AS biomass_plan
-            FROM mining_plan_productions
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore_plan,
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore_plan
+
+            FROM view_mining_plan_productions
             WHERE {where_plan}
             GROUP BY DATE(date_plan)
         )
+
         SELECT
-            TO_CHAR(tanggal.date, 'YYYY-MM-DD') AS tanggal,
-            ROUND(COALESCE(a.lglo, 0), 2) AS lglo,
-            ROUND(COALESCE(p.lglo_plan, 0), 2) AS lglo_plan,
-            ROUND(CASE WHEN p.lglo_plan > 0 THEN (a.lglo * 100.0 / p.lglo_plan)::numeric ELSE 0 END, 2) AS lglo_ach,
-            ROUND(COALESCE(a.mglo, 0), 2) AS mglo,
-            ROUND(COALESCE(p.mglo_plan, 0), 2) AS mglo_plan,
-            ROUND(CASE WHEN p.mglo_plan > 0 THEN (a.mglo * 100.0 / p.mglo_plan)::numeric ELSE 0 END, 2) AS mglo_ach,
-            ROUND(COALESCE(a.hglo, 0), 2) AS hglo,
-            ROUND(COALESCE(p.hglo_plan, 0), 2) AS hglo_plan,
-            ROUND(CASE WHEN p.hglo_plan > 0 THEN (a.hglo * 100.0 / p.hglo_plan)::numeric ELSE 0 END, 2) AS hglo_ach,
-            ROUND(COALESCE(a.mws, 0), 2) AS mws,
-            ROUND(COALESCE(p.mws_plan, 0), 2) AS mws_plan,
-            ROUND(CASE WHEN p.mws_plan > 0 THEN (a.mws * 100.0 / p.mws_plan)::numeric ELSE 0 END, 2) AS mws_ach,
-            ROUND(COALESCE(a.lgso, 0), 2) AS lgso,
-            ROUND(COALESCE(p.lgso_plan, 0), 2) AS lgso_plan,
-            ROUND(CASE WHEN p.lgso_plan > 0 THEN (a.lgso * 100.0 / p.lgso_plan)::numeric ELSE 0 END, 2) AS lgso_ach,
-            ROUND(COALESCE(a.mgso, 0), 2) AS mgso,
-            ROUND(COALESCE(p.mgso_plan, 0), 2) AS mgso_plan,
-            ROUND(CASE WHEN p.mgso_plan > 0 THEN (a.mgso * 100.0 / p.mgso_plan)::numeric ELSE 0 END, 2) AS mgso_ach,
-            ROUND(COALESCE(a.hgso, 0), 2) AS hgso,
-            ROUND(COALESCE(p.hgso_plan, 0), 2) AS hgso_plan,
-            ROUND(CASE WHEN p.hgso_plan > 0 THEN (a.hgso * 100.0 / p.hgso_plan)::numeric ELSE 0 END, 2) AS hgso_ach,
-            ROUND(COALESCE(a.lim, 0), 2) AS lim,
-            ROUND(COALESCE(p.lim_plan, 0), 2) AS lim_plan,
-            ROUND(CASE WHEN p.lim_plan > 0 THEN (a.lim * 100.0 / p.lim_plan)::numeric ELSE 0 END, 2) AS lim_ach,
-            ROUND(COALESCE(a.sap, 0), 2) AS sap,
-            ROUND(COALESCE(p.sap_plan, 0), 2) AS sap_plan,
-            ROUND(CASE WHEN p.sap_plan > 0 THEN (a.sap * 100.0 / p.sap_plan)::numeric ELSE 0 END, 2) AS sap_ach,
-            ROUND(COALESCE(a.topsoil, 0), 2) AS topsoil,
-            ROUND(COALESCE(p.topsoil_plan, 0), 2) AS topsoil_plan,
-            ROUND(CASE WHEN p.topsoil_plan > 0 THEN (a.topsoil * 100.0 / p.topsoil_plan)::numeric ELSE 0 END, 2) AS topsoil_ach,
-            ROUND(COALESCE(a.ob, 0), 2) AS ob,
-            ROUND(COALESCE(p.ob_plan, 0), 2) AS ob_plan,
-            ROUND(CASE WHEN p.ob_plan > 0 THEN (a.ob * 100.0 / p.ob_plan)::numeric ELSE 0 END, 2) AS ob_ach,
-            ROUND(COALESCE(a.waste, 0), 2) AS waste,
-            ROUND(COALESCE(p.waste_plan, 0), 2) AS waste_plan,
-            ROUND(CASE WHEN p.waste_plan > 0 THEN (a.waste * 100.0 / p.waste_plan)::numeric ELSE 0 END, 2) AS waste_ach,
-            ROUND(COALESCE(a.quarry, 0), 2) AS quarry,
-            ROUND(COALESCE(p.quarry_plan, 0), 2) AS quarry_plan,
-            ROUND(CASE WHEN p.quarry_plan > 0 THEN (a.quarry * 100.0 / p.quarry_plan)::numeric ELSE 0 END, 2) AS quarry_ach,
-            ROUND(COALESCE(a.ballast, 0), 2) AS ballast,
-            ROUND(COALESCE(p.ballast_plan, 0), 2) AS ballast_plan,
-            ROUND(CASE WHEN p.ballast_plan > 0 THEN (a.ballast * 100.0 / p.ballast_plan)::numeric ELSE 0 END, 2) AS ballast_ach,
-            ROUND(COALESCE(a.biomass, 0), 2) AS biomass,
-            ROUND(COALESCE(p.biomass_plan, 0), 2) AS biomass_plan,
-            ROUND(CASE WHEN p.biomass_plan > 0 THEN (a.biomass * 100.0 / p.biomass_plan)::numeric ELSE 0 END, 2) AS biomass_ach
+            TO_CHAR(tanggal.tanggal, 'YYYY-MM-DD') AS tanggal,
+
+            COALESCE(a.ore, 0)::numeric AS ore,
+            COALESCE(p.ore_plan, 0)::numeric AS ore_plan,
+
+            COALESCE(a.non_ore, 0)::numeric AS non_ore,
+            COALESCE(p.non_ore_plan, 0)::numeric AS non_ore_plan
+
         FROM tanggal
-        LEFT JOIN actual a ON tanggal.date = a.tanggal
-        LEFT JOIN plan p ON tanggal.date = p.tanggal
-        ORDER BY tanggal.date
+        LEFT JOIN actual a
+            ON tanggal.tanggal = a.tanggal
+        LEFT JOIN plan p
+            ON tanggal.tanggal = p.tanggal
+        ORDER BY tanggal.tanggal
     """
 
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         data = cursor.fetchall()
 
-    columns = [
-        'tanggal',
-        'lglo', 'lglo_plan', 'lglo_ach',
-        'mglo', 'mglo_plan', 'mglo_ach',
-        'hglo', 'hglo_plan', 'hglo_ach',
-        'mws',  'mws_plan',  'mws_ach',
-        'lgso', 'lgso_plan', 'lgso_ach',
-        'mgso', 'mgso_plan', 'mgso_ach',
-        'hgso', 'hgso_plan', 'hgso_ach',
-        'lim', 'lim_plan', 'lim_ach',
-        'sap', 'sap_plan', 'sap_ach',
-        'topsoil', 'topsoil_plan', 'topsoil_ach',
-        'ob', 'ob_plan', 'ob_ach',
-        'waste', 'waste_plan', 'waste_ach',
-        'quarry', 'quarry_plan', 'quarry_ach',
-        'ballast', 'ballast_plan', 'ballast_ach',
-        'biomass', 'biomass_plan', 'biomass_ach',
+    df = pd.DataFrame(
+        data,
+        columns=[
+            "tanggal",
+            "ore",
+            "ore_plan",
+            "non_ore",
+            "non_ore_plan",
+        ],
+    )
+
+    numeric_cols = [
+        "ore",
+        "ore_plan",
+        "non_ore",
+        "non_ore_plan",
     ]
 
-    df = pd.DataFrame(data, columns=columns)
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    lim_cols = ['lglo', 'mglo', 'hglo','lim']
-    sap_cols = ['lgso', 'mgso', 'hgso','sap']
-    lim_plan_cols = [f + '_plan' for f in lim_cols]
-    sap_plan_cols = [f + '_plan' for f in sap_cols]
-    non_ore_cols = ['topsoil', 'ob', 'waste', 'quarry', 'ballast', 'biomass']
-    non_ore_plan_cols = [f + '_plan' for f in non_ore_cols]
+    df["total_actual"] = df["ore"] + df["non_ore"]
+    df["total_plan"] = df["ore_plan"] + df["non_ore_plan"]
 
-    # Konversi kolom ke numerik (handle string atau null)
-    for col in lim_cols + sap_cols + lim_plan_cols + sap_plan_cols + non_ore_cols + non_ore_plan_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
+    df["achievement"] = df.apply(
+        lambda row: round((row["total_actual"] / row["total_plan"]) * 100, 2)
+        if row["total_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    df['limonite']       = df[lim_cols].sum(axis=1)
-    df['limonite_plan']  = df[lim_plan_cols].sum(axis=1)
-    df['saprolite']      = df[sap_cols].sum(axis=1)
-    df['saprolite_plan'] = df[sap_plan_cols].sum(axis=1)
-    df['non_ore']        = df[non_ore_cols].sum(axis=1)
-    df['non_ore_plan']   = df[non_ore_plan_cols].sum(axis=1)
-    
+    df["achievement_ore"] = df.apply(
+        lambda row: round((row["ore"] / row["ore_plan"]) * 100, 2)
+        if row["ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    df['total_actual'] = df['limonite'] + df['saprolite'] + df['non_ore'] 
-    df['total_plan']   = df['limonite_plan'] + df['saprolite_plan'] +  df['non_ore_plan']
-    df['achievement']  = df.apply(lambda row: round((row['total_actual'] / row['total_plan'] * 100), 2) if row['total_plan'] > 0 else 0, axis=1)
+    df["achievement_non_ore"] = df.apply(
+        lambda row: round((row["non_ore"] / row["non_ore_plan"]) * 100, 2)
+        if row["non_ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    df['limonite_ach']  = df.apply(lambda r: round((r['limonite'] / r['limonite_plan'] * 100), 2) if r['limonite_plan'] > 0 else 0, axis=1)
-    df['saprolite_ach'] = df.apply(lambda r: round((r['saprolite'] / r['saprolite_plan'] * 100), 2) if r['saprolite_plan'] > 0 else 0, axis=1)
+    return JsonResponse(
+        {
+            "x_data": df["tanggal"].astype(str).tolist(),
 
-    df['non_ore_ach']   = df.apply(lambda r: round((r['non_ore'] / r['non_ore_plan'] * 100), 2) if r['non_ore_plan'] > 0 else 0, axis=1)
+            "total_actual": df["total_actual"].round(1).astype(float).tolist(),
+            "total_plan": df["total_plan"].round(1).astype(float).tolist(),
+            "achievement": df["achievement"].round(1).astype(float).tolist(),
 
+            "ore_actual": df["ore"].round(1).astype(float).tolist(),
+            "ore_plan": df["ore_plan"].round(1).astype(float).tolist(),
+            "ore_achievement": df["achievement_ore"].round(1).astype(float).tolist(),
 
-    return JsonResponse({
-        'x_data'       : df['tanggal'].astype(str).tolist(),
-        'total_actual' : df['total_actual'].round(1).tolist(),
-        'total_plan'   : df['total_plan'].round(1).tolist(),
-        'achievement'  : df['achievement'].round(1).tolist(),
-    }, safe=False)
+            "non_ore_actual": df["non_ore"].round(1).astype(float).tolist(),
+            "non_ore_plan": df["non_ore_plan"].round(1).astype(float).tolist(),
+            "non_ore_achievement": df["achievement_non_ore"].round(1).astype(float).tolist(),
+        },
+        safe=False,
+    )
 
 # http://kawi.localhost:8000/api/analytics/raw/mining/chart/?filter_type=yearly&filter_year=2025&iup_id=1
 def get_yearly_chart(yearly, iup_filter=None):
@@ -1170,7 +1044,6 @@ def get_yearly_chart(yearly, iup_filter=None):
     actual_params = [yearly]
     plan_params = [yearly]
 
-    # filter iup
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
@@ -1194,100 +1067,67 @@ def get_yearly_chart(yearly, iup_filter=None):
             ) AS bulan
             FROM generate_series(0, 11) AS n
         ),
+
         actual AS (
             SELECT
                 TO_CHAR(date_production, 'YYYY-MM') AS bulan,
-                SUM(CASE WHEN nama_material = 'LGLO' THEN tonnage ELSE 0 END)::numeric AS lglo,
-                SUM(CASE WHEN nama_material = 'MGLO' THEN tonnage ELSE 0 END)::numeric AS mglo,
-                SUM(CASE WHEN nama_material = 'HGLO' THEN tonnage ELSE 0 END)::numeric AS hglo,
-                SUM(CASE WHEN nama_material = 'MWS' THEN tonnage ELSE 0 END)::numeric AS mws,
-                SUM(CASE WHEN nama_material = 'LGSO' THEN tonnage ELSE 0 END)::numeric AS lgso,
-                SUM(CASE WHEN nama_material = 'MGSO' THEN tonnage ELSE 0 END)::numeric AS mgso,
-                SUM(CASE WHEN nama_material = 'HGSO' THEN tonnage ELSE 0 END)::numeric AS hgso,
-                SUM(CASE WHEN nama_material = 'LIM' THEN tonnage ELSE 0 END)::numeric AS lim,
-                SUM(CASE WHEN nama_material = 'SAP' THEN tonnage ELSE 0 END)::numeric AS sap,
-                SUM(CASE WHEN nama_material = 'Top Soil' THEN tonnage ELSE 0 END)::numeric AS topsoil,
-                SUM(CASE WHEN nama_material = 'OB' THEN tonnage ELSE 0 END)::numeric AS ob,
-                SUM(CASE WHEN nama_material = 'Waste' THEN tonnage ELSE 0 END)::numeric AS waste,
-                SUM(CASE WHEN nama_material = 'Quarry' THEN tonnage ELSE 0 END)::numeric AS quarry,
-                SUM(CASE WHEN nama_material = 'Ballast' THEN tonnage ELSE 0 END)::numeric AS ballast,
-                SUM(CASE WHEN nama_material = 'Biomass' THEN tonnage ELSE 0 END)::numeric AS biomass
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore,
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore
+
             FROM view_mining_productions
             WHERE {where_actual}
             GROUP BY TO_CHAR(date_production, 'YYYY-MM')
         ),
+
         plan AS (
             SELECT
                 TO_CHAR(date_plan, 'YYYY-MM') AS bulan,
-                SUM(lglo)::numeric AS lglo_plan,
-                SUM(mglo)::numeric AS mglo_plan,
-                SUM(hglo)::numeric AS hglo_plan,
-                SUM(mws)::numeric AS mws_plan,
-                SUM(lgso)::numeric AS lgso_plan,
-                SUM(mgso)::numeric AS mgso_plan,
-                SUM(hgso)::numeric AS hgso_plan,
-                SUM(lim)::numeric AS lim_plan,
-                SUM(sap)::numeric AS sap_plan,
-                SUM(topsoil)::numeric AS topsoil_plan,
-                SUM(ob)::numeric AS ob_plan,
-                SUM(waste)::numeric AS waste_plan,
-                SUM(quarry)::numeric AS quarry_plan,
-                SUM(ballast)::numeric AS ballast_plan,
-                SUM(biomass)::numeric AS biomass_plan
-            FROM mining_plan_productions
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS ore_plan,
+
+                SUM(
+                    CASE
+                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        THEN tonnage ELSE 0
+                    END
+                )::numeric AS non_ore_plan
+
+            FROM view_mining_plan_productions
             WHERE {where_plan}
             GROUP BY TO_CHAR(date_plan, 'YYYY-MM')
         )
+
         SELECT
             b.bulan,
-            ROUND(COALESCE(a.lglo, 0), 2) AS lglo,
-            ROUND(COALESCE(p.lglo_plan, 0), 2) AS lglo_plan,
-            ROUND(CASE WHEN COALESCE(p.lglo_plan, 0) > 0 THEN (COALESCE(a.lglo, 0) * 100.0 / p.lglo_plan)::numeric ELSE 0 END, 2) AS lglo_ach,
-            ROUND(COALESCE(a.mglo, 0), 2) AS mglo,
-            ROUND(COALESCE(p.mglo_plan, 0), 2) AS mglo_plan,
-            ROUND(CASE WHEN COALESCE(p.mglo_plan, 0) > 0 THEN (COALESCE(a.mglo, 0) * 100.0 / p.mglo_plan)::numeric ELSE 0 END, 2) AS mglo_ach,
-            ROUND(COALESCE(a.hglo, 0), 2) AS hglo,
-            ROUND(COALESCE(p.hglo_plan, 0), 2) AS hglo_plan,
-            ROUND(CASE WHEN COALESCE(p.hglo_plan, 0) > 0 THEN (COALESCE(a.hglo, 0) * 100.0 / p.hglo_plan)::numeric ELSE 0 END, 2) AS hglo_ach,
-            ROUND(COALESCE(a.mws, 0), 2) AS mws,
-            ROUND(COALESCE(p.mws_plan, 0), 2) AS mws_plan,
-            ROUND(CASE WHEN COALESCE(p.mws_plan, 0) > 0 THEN (COALESCE(a.mws, 0) * 100.0 / p.mws_plan)::numeric ELSE 0 END, 2) AS mws_ach,
-            ROUND(COALESCE(a.lgso, 0), 2) AS lgso,
-            ROUND(COALESCE(p.lgso_plan, 0), 2) AS lgso_plan,
-            ROUND(CASE WHEN COALESCE(p.lgso_plan, 0) > 0 THEN (COALESCE(a.lgso, 0) * 100.0 / p.lgso_plan)::numeric ELSE 0 END, 2) AS lgso_ach,
-            ROUND(COALESCE(a.mgso, 0), 2) AS mgso,
-            ROUND(COALESCE(p.mgso_plan, 0), 2) AS mgso_plan,
-            ROUND(CASE WHEN COALESCE(p.mgso_plan, 0) > 0 THEN (COALESCE(a.mgso, 0) * 100.0 / p.mgso_plan)::numeric ELSE 0 END, 2) AS mgso_ach,
-            ROUND(COALESCE(a.hgso, 0), 2) AS hgso,
-            ROUND(COALESCE(p.hgso_plan, 0), 2) AS hgso_plan,
-            ROUND(CASE WHEN COALESCE(p.hgso_plan, 0) > 0 THEN (COALESCE(a.hgso, 0) * 100.0 / p.hgso_plan)::numeric ELSE 0 END, 2) AS hgso_ach,
-            ROUND(COALESCE(a.lim, 0), 2) AS lim,
-            ROUND(COALESCE(p.lim_plan, 0), 2) AS lim_plan,
-            ROUND(CASE WHEN COALESCE(p.lim_plan, 0) > 0 THEN (COALESCE(a.lim, 0) * 100.0 / p.lim_plan)::numeric ELSE 0 END, 2) AS lim_ach,
-            ROUND(COALESCE(a.sap, 0), 2) AS sap,
-            ROUND(COALESCE(p.sap_plan, 0), 2) AS sap_plan,
-            ROUND(CASE WHEN COALESCE(p.sap_plan, 0) > 0 THEN (COALESCE(a.sap, 0) * 100.0 / p.sap_plan)::numeric ELSE 0 END, 2) AS sap_ach,
-            ROUND(COALESCE(a.topsoil, 0), 2) AS topsoil,
-            ROUND(COALESCE(p.topsoil_plan, 0), 2) AS topsoil_plan,
-            ROUND(CASE WHEN COALESCE(p.topsoil_plan, 0) > 0 THEN (COALESCE(a.topsoil, 0) * 100.0 / p.topsoil_plan)::numeric ELSE 0 END, 2) AS topsoil_ach,
-            ROUND(COALESCE(a.ob, 0), 2) AS ob,
-            ROUND(COALESCE(p.ob_plan, 0), 2) AS ob_plan,
-            ROUND(CASE WHEN COALESCE(p.ob_plan, 0) > 0 THEN (COALESCE(a.ob, 0) * 100.0 / p.ob_plan)::numeric ELSE 0 END, 2) AS ob_ach,
-            ROUND(COALESCE(a.waste, 0), 2) AS waste,
-            ROUND(COALESCE(p.waste_plan, 0), 2) AS waste_plan,
-            ROUND(CASE WHEN COALESCE(p.waste_plan, 0) > 0 THEN (COALESCE(a.waste, 0) * 100.0 / p.waste_plan)::numeric ELSE 0 END, 2) AS waste_ach,
-            ROUND(COALESCE(a.quarry, 0), 2) AS quarry,
-            ROUND(COALESCE(p.quarry_plan, 0), 2) AS quarry_plan,
-            ROUND(CASE WHEN COALESCE(p.quarry_plan, 0) > 0 THEN (COALESCE(a.quarry, 0) * 100.0 / p.quarry_plan)::numeric ELSE 0 END, 2) AS quarry_ach,
-            ROUND(COALESCE(a.ballast, 0), 2) AS ballast,
-            ROUND(COALESCE(p.ballast_plan, 0), 2) AS ballast_plan,
-            ROUND(CASE WHEN COALESCE(p.ballast_plan, 0) > 0 THEN (COALESCE(a.ballast, 0) * 100.0 / p.ballast_plan)::numeric ELSE 0 END, 2) AS ballast_ach,
-            ROUND(COALESCE(a.biomass, 0), 2) AS biomass,
-            ROUND(COALESCE(p.biomass_plan, 0), 2) AS biomass_plan,
-            ROUND(CASE WHEN COALESCE(p.biomass_plan, 0) > 0 THEN (COALESCE(a.biomass, 0) * 100.0 / p.biomass_plan)::numeric ELSE 0 END, 2) AS biomass_ach
+
+            COALESCE(a.ore, 0)::numeric AS ore,
+            COALESCE(p.ore_plan, 0)::numeric AS ore_plan,
+
+            COALESCE(a.non_ore, 0)::numeric AS non_ore,
+            COALESCE(p.non_ore_plan, 0)::numeric AS non_ore_plan
+
         FROM bulan b
-        LEFT JOIN actual a ON a.bulan = b.bulan
-        LEFT JOIN plan p ON p.bulan = b.bulan
+        LEFT JOIN actual a
+            ON a.bulan = b.bulan
+        LEFT JOIN plan p
+            ON p.bulan = b.bulan
         ORDER BY b.bulan
     """
 
@@ -1295,64 +1135,68 @@ def get_yearly_chart(yearly, iup_filter=None):
         cursor.execute(query, params)
         data = cursor.fetchall()
 
-    columns = [
-        'bulan',
-        'lglo', 'lglo_plan', 'lglo_ach',
-        'mglo', 'mglo_plan', 'mglo_ach',
-        'hglo', 'hglo_plan', 'hglo_ach',
-        'mws',  'mws_plan',  'mws_ach',
-        'lgso', 'lgso_plan', 'lgso_ach',
-        'mgso', 'mgso_plan', 'mgso_ach',
-        'hgso', 'hgso_plan', 'hgso_ach',
-        'lim', 'lim_plan', 'lim_ach',
-        'sap', 'sap_plan', 'sap_ach',
-        'topsoil', 'topsoil_plan', 'topsoil_ach',
-        'ob', 'ob_plan', 'ob_ach',
-        'waste', 'waste_plan', 'waste_ach',
-        'quarry', 'quarry_plan', 'quarry_ach',
-        'ballast', 'ballast_plan', 'ballast_ach',
-        'biomass', 'biomass_plan', 'biomass_ach',
-    ]
+    df = pd.DataFrame(
+        data,
+        columns=[
+            "bulan",
+            "ore",
+            "ore_plan",
+            "non_ore",
+            "non_ore_plan",
+        ],
+    )
 
-    df = pd.DataFrame(data, columns=columns)
+    numeric_cols = ["ore", "ore_plan", "non_ore", "non_ore_plan"]
 
-    lim_cols = ['lglo', 'mglo', 'hglo','lim']
-    sap_cols = ['lgso', 'mgso', 'hgso','sap']
-    lim_plan_cols = [f + '_plan' for f in lim_cols]
-    sap_plan_cols = [f + '_plan' for f in sap_cols]
-    non_ore_cols = ['topsoil', 'ob', 'waste', 'quarry', 'ballast', 'biomass']
-    non_ore_plan_cols = [f + '_plan' for f in non_ore_cols]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Konversi kolom ke numerik (handle string atau null)
-    for col in lim_cols + sap_cols + lim_plan_cols + sap_plan_cols + non_ore_cols + non_ore_plan_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
+    df["total_actual"] = df["ore"] + df["non_ore"]
+    df["total_plan"] = df["ore_plan"] + df["non_ore_plan"]
 
-    df['limonite']       = df[lim_cols].sum(axis=1)
-    df['limonite_plan']  = df[lim_plan_cols].sum(axis=1)
-    df['saprolite']      = df[sap_cols].sum(axis=1)
-    df['saprolite_plan'] = df[sap_plan_cols].sum(axis=1)
-    df['non_ore']        = df[non_ore_cols].sum(axis=1)
-    df['non_ore_plan']   = df[non_ore_plan_cols].sum(axis=1)
-    
-    df['total_actual']  = df['limonite'] + df['saprolite'] + df['non_ore'] 
-    df['total_plan']    = df['limonite_plan'] + df['saprolite_plan'] +  df['non_ore_plan']
-    df['achievement']   = df.apply(lambda row: round((row['total_actual'] / row['total_plan'] * 100), 2) if row['total_plan'] > 0 else 0, axis=1)
+    df["achievement"] = df.apply(
+        lambda row: round((row["total_actual"] / row["total_plan"] * 100), 2)
+        if row["total_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    df['limonite_ach']  = df.apply(lambda r: round((r['limonite'] / r['limonite_plan'] * 100), 2) if r['limonite_plan'] > 0 else 0, axis=1)
-    df['saprolite_ach'] = df.apply(lambda r: round((r['saprolite'] / r['saprolite_plan'] * 100), 2) if r['saprolite_plan'] > 0 else 0, axis=1)
+    df["achievement_ore"] = df.apply(
+        lambda row: round((row["ore"] / row["ore_plan"] * 100), 2)
+        if row["ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    df['non_ore_ach']   = df.apply(lambda r: round((r['non_ore'] / r['non_ore_plan'] * 100), 2) if r['non_ore_plan'] > 0 else 0, axis=1)
+    df["achievement_non_ore"] = df.apply(
+        lambda row: round((row["non_ore"] / row["non_ore_plan"] * 100), 2)
+        if row["non_ore_plan"] > 0
+        else 0,
+        axis=1,
+    )
 
-    # Define month names
-    x_data = df['bulan'].apply(lambda x: datetime.strptime(x, '%Y-%m').strftime('%b %y')).tolist()
+    x_data = df["bulan"].apply(
+        lambda x: datetime.strptime(x, "%Y-%m").strftime("%b %y")
+    ).tolist()
 
+    return JsonResponse(
+        {
+            "x_data": x_data,
 
-    return JsonResponse({
-        'x_data'       : x_data,
-        'total_actual' : df['total_actual'].round(1).tolist(),
-        'total_plan'   : df['total_plan'].round(1).tolist(),
-        'achievement'  : df['achievement'].round(1).tolist(),
-    }, safe=False)
+            "total_actual": df["total_actual"].round(1).astype(float).tolist(),
+            "total_plan": df["total_plan"].round(1).astype(float).tolist(),
+            "achievement": df["achievement"].round(1).astype(float).tolist(),
+
+            "ore_actual": df["ore"].round(1).astype(float).tolist(),
+            "ore_plan": df["ore_plan"].round(1).astype(float).tolist(),
+            "ore_achievement": df["achievement_ore"].round(1).astype(float).tolist(),
+
+            "non_ore_actual": df["non_ore"].round(1).astype(float).tolist(),
+            "non_ore_plan": df["non_ore_plan"].round(1).astype(float).tolist(),
+            "non_ore_achievement": df["achievement_non_ore"].round(1).astype(float).tolist(),
+        },
+        safe=False,
+    )
 
 def get_all_chart(iup_filter=None):
     where_actual = "1=1"
@@ -1361,7 +1205,6 @@ def get_all_chart(iup_filter=None):
     actual_params = []
     plan_params = []
 
-    # filter iup
     if iup_filter:
         iup_ids = [x.strip() for x in str(iup_filter).split(",") if x.strip()]
         if iup_ids:
@@ -1371,34 +1214,32 @@ def get_all_chart(iup_filter=None):
             actual_params += iup_ids
             plan_params += iup_ids
 
-    query = f""" 
+    query = f"""
         WITH actual_per_year AS (
-            SELECT 
+            SELECT
                 TO_CHAR(date_production, 'YYYY') AS tahun,
                 SUM(tonnage) AS total_tonnage
             FROM view_mining_productions
             WHERE {where_actual}
             GROUP BY TO_CHAR(date_production, 'YYYY')
         ),
+
         plan_per_year AS (
-            SELECT 
+            SELECT
                 TO_CHAR(date_plan, 'YYYY') AS tahun,
-                SUM(
-                    COALESCE(topsoil, 0) + COALESCE(ob, 0) + COALESCE(lglo, 0) + COALESCE(mglo, 0) +
-                    COALESCE(hglo, 0) + COALESCE(waste, 0) + COALESCE(mws, 0) + COALESCE(lgso, 0) +
-                    COALESCE(mgso, 0) + COALESCE(hgso, 0) + COALESCE(lim, 0) + COALESCE(sap, 0) + 
-                    COALESCE(quarry, 0) + COALESCE(ballast, 0) + COALESCE(biomass, 0)
-                ) AS plan_data
-            FROM mining_plan_productions
+                SUM(tonnage) AS plan_data
+            FROM view_mining_plan_productions
             WHERE {where_plan}
             GROUP BY TO_CHAR(date_plan, 'YYYY')
         )
-        SELECT 
+
+        SELECT
             COALESCE(a.tahun, p.tahun) AS tahun,
             COALESCE(a.total_tonnage, 0) AS total_tonnage,
             COALESCE(p.plan_data, 0) AS plan_data
         FROM actual_per_year a
-        FULL OUTER JOIN plan_per_year p ON a.tahun = p.tahun
+        FULL OUTER JOIN plan_per_year p
+            ON a.tahun = p.tahun
         ORDER BY tahun
     """
 
@@ -1408,14 +1249,21 @@ def get_all_chart(iup_filter=None):
         cursor.execute(query, params)
         data = cursor.fetchall()
 
-    df = pd.DataFrame(data, columns=['tahun','total_tonnage', 'plan_data'])
-    df['total'] = pd.to_numeric(df['total_tonnage'], errors='coerce').fillna(0.0).round(2)
-    df['plan_data'] = pd.to_numeric(df['plan_data'], errors='coerce').fillna(0.0).round(2)
-    df['achievement'] = df.apply( lambda row: round(float(row['total']) / float(row['plan_data']) * 100, 2) if float(row['plan_data']) > 0 else 0,axis=1)
+    df = pd.DataFrame(data, columns=["tahun", "total_tonnage", "plan_data"])
+
+    df["total"] = pd.to_numeric(df["total_tonnage"], errors="coerce").fillna(0.0).round(2)
+    df["plan_data"] = pd.to_numeric(df["plan_data"], errors="coerce").fillna(0.0).round(2)
+
+    df["achievement"] = df.apply(
+        lambda row: round(float(row["total"]) / float(row["plan_data"]) * 100, 2)
+        if float(row["plan_data"]) > 0
+        else 0,
+        axis=1,
+    )
 
     return JsonResponse({
-        'x_data'      : df['tahun'].tolist(), 
-        'total_actual': df['total'].tolist(),
-        'total_plan'  : df['plan_data'].tolist(),
-        'achievement' : df['achievement'].tolist(),
+        "x_data": df["tahun"].tolist(),
+        "total_actual": df["total"].tolist(),
+        "total_plan": df["plan_data"].tolist(),
+        "achievement": df["achievement"].tolist(),
     }, safe=False)

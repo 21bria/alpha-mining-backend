@@ -9,7 +9,7 @@ from .tables.geology_waybills import WaybillsImporter
 from .tables.geology_samples import SamplesImporter
 from .tables.geology_ore_productions import OreProductionImporter
 
-from .tables.mining_planing import MiningPlanningImporter
+from .tables.mining_plan_production import MiningPlanProductionImporter
 from .tables.mining_productions import MiningProductionImporter
 from .tables.mining_fuel_daily import MiningFuelTransposeImporter
 from .tables.mine_units import MineUnitImporter
@@ -41,7 +41,7 @@ IMPORTER_REGISTRY = {
     "geology.ore"             : OreProductionImporter,
 
     # Mining
-    "mining.plan_productions" : MiningPlanningImporter,
+    "mining.plan_productions" : MiningPlanProductionImporter,
     "mining.productions"      : MiningProductionImporter,
     "mining.fuel_daily"       : MiningFuelTransposeImporter,
     "mining.rainfall"         : MiningRainfallImporter,

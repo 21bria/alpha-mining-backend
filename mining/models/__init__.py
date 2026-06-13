@@ -2,6 +2,7 @@ from .addition_factor import *
 from .fuel_consumption import *
 from .fuel_stock import *
 from .plan_productions import *
+from .plan_barging import *
 from .productions import *
 from .productions_view import *
 from .reserve import *

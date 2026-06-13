@@ -2,6 +2,8 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework import serializers
 
+from selling.models import SellingBarging
+
 from geology.models import DomeMerge
 from core.permissions import user_allowed_iup_ids
 from geology.services.dome_merge import (
@@ -120,6 +122,16 @@ class DomeMergeSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError({
                             "dome_second": "Target dome tidak termasuk IUP yang diizinkan."
                         })
+                    
+        # Proteksi selling/barging sebelum merge
+        if SellingBarging.objects.filter(id_pile=original_dome.id).exists():
+            raise serializers.ValidationError({
+                "original_dome": (
+                    "Original dome ini sudah memiliki data Selling/Barging. "
+                    "Silakan ubah atau batalkan data selling terlebih dahulu sebelum merge."
+                )
+            })
+            
 
         # validasi tonnage di serializer juga, supaya cepat gagal sebelum service
         original_total = get_tonnage_by_dome(original_dome.id)

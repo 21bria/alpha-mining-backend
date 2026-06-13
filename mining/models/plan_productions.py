@@ -4,39 +4,67 @@ from core.models import BaseTenantModel
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
-class planProductions(BaseTenantModel):
-    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    date_plan  = models.DateField(default=None, null=True, blank=True)
-    category   = models.CharField(max_length=25, default=None, null=True, blank=True)
-    sources    = models.CharField(max_length=50, default=None, null=True, blank=True)
-    vendors    = models.CharField(max_length=15, default=None, null=True, blank=True)
-    topsoil    = models.FloatField(default=0, null=True, blank=True)
-    ob         = models.FloatField(default=0, null=True, blank=True)
-    lglo       = models.FloatField(default=0, null=True, blank=True)
-    mglo       = models.FloatField(default=0, null=True, blank=True)
-    hglo       = models.FloatField(default=0, null=True, blank=True)
-    waste      = models.FloatField(default=0, null=True, blank=True)
-    mws        = models.FloatField(default=0, null=True, blank=True)
-    lgso       = models.FloatField(default=0, null=True, blank=True)
-    uglo       = models.FloatField(default=0, null=True, blank=True)
-    mgso       = models.FloatField(default=0, null=True, blank=True)
-    hgso       = models.FloatField(default=0, null=True, blank=True)
-    lim        = models.FloatField(default=0, null=True, blank=True)
-    sap        = models.FloatField(default=0, null=True, blank=True)
-    quarry     = models.FloatField(default=0, null=True, blank=True)
-    ballast    = models.FloatField(default=0, null=True, blank=True)
-    biomass    = models.FloatField(default=0, null=True, blank=True)
-    ref_plan   = models.CharField(max_length=150, default=None, null=True, blank=True)
-    task_id    = models.CharField(max_length=255, default=None, null=True, blank=True)
-    user       = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+class PlanProduction(BaseTenantModel):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    date_plan = models.DateField( null=True,blank=True)
+    category = models.CharField(max_length=25,null=True, blank=True)
+    source_code = models.CharField(max_length=50,null=True,blank=True)
+    vendor_code = models.CharField(max_length=50,null=True, blank=True)
+    ref_plan = models.CharField( max_length=150,null=True, blank=True)
+    task_id = models.CharField( max_length=255,null=True, blank=True)
+    user = models.ForeignKey(User,on_delete=models.SET_NULL,null=True, blank=True)
 
     class Meta:
-        db_table  = 'mining_plan_productions'
+        db_table = "mining_plan_production"
+        indexes = [
+            models.Index(fields=["iup"]),
+            models.Index(fields=["date_plan"]),
+            models.Index(fields=["category"]),
+            models.Index(fields=["source_code"]),
+            models.Index(fields=["vendor_code"]),
+            models.Index(fields=["ref_plan"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "iup",
+                    "date_plan",
+                    "category",
+                    "source_code",
+                    "vendor_code",
+                ],
+                name="uq_plan_production_daily_source_vendor",
+            )
+        ]
 
-    
-    indexes = [
-        models.Index(fields=['iup']),
-        models.Index(fields=['date_plan']),
-        models.Index(fields=['ref_plan']),
-    ]
 
+class PlanProductionDetail(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    plan = models.ForeignKey(PlanProduction,related_name="details",on_delete=models.CASCADE)
+    material_code = models.CharField( max_length=50 )
+    material_name = models.CharField(max_length=100,null=True,blank=True)
+    tonnage = models.FloatField(default=0)
+
+    class Meta:
+        db_table = "mining_plan_production_details"
+        indexes = [
+            models.Index(fields=["plan"]),
+            models.Index(fields=["material_code"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "plan",
+                    "material_code",
+                ],
+                name="uq_plan_production_detail_material",
+            )
+        ]

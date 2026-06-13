@@ -10,8 +10,13 @@ from analytics.api.sample_crm.views_mral import sampleCrmMralviewSet
 from analytics.api.sample_duplicated.views import sampleDupRoaviewSet
 from analytics.api.sample_duplicated.views_mral import sampleDupMralviewSet
 
-from analytics.api.bod_weekly.views import BodWeeklyReportViewSet,BodWeeklyDocumentViewSet,WeeklyReportViewSet
+from analytics.api.sample_dome.views import SamplesDomeViewSet
 
+from analytics.api.report_management.views import (
+    ManagementReportViewSet,
+    ReportManagementViewSet,
+    ReportManagementDocumentViewSet,
+)
 
 router = DefaultRouter()
 
@@ -21,15 +26,29 @@ router.register(r"sample-crm-mral", sampleCrmMralviewSet, basename="sample-crm-m
 router.register(r"sample-duplicated-roa", sampleDupRoaviewSet, basename="sample-duplicated-roa")
 router.register(r"sample-duplicated-mral", sampleDupMralviewSet, basename="sample-duplicated-mral")
 
-router.register(r"weekly-report",WeeklyReportViewSet,basename="weekly-report")
+router.register(r"sample-dome", SamplesDomeViewSet, basename="sample-dome")
 
-router.register(r"bod-weekly-report",BodWeeklyReportViewSet,basename="bod-weekly-report")
+router.register(
+    r"management-report",
+    ManagementReportViewSet,
+    basename="management-report",
+)
 
-router.register(r"bod-weekly-document", BodWeeklyDocumentViewSet,basename="bod-weekly-document")
+router.register(
+    r"report-management",
+    ReportManagementViewSet,
+    basename="report-management",
+)
+
+router.register(
+    r"report-management-document",
+    ReportManagementDocumentViewSet,
+    basename="report-management-document",
+)
 
 urlpatterns = [
     path("export-jobs/<uuid:pk>/",ExportJobDetailView.as_view(),name="report-export-job-detail"),
-    path( "export-jobs/<uuid:pk>/download/",ExportJobDownloadView.as_view(),name="report-export-job-download"),
+    path("export-jobs/<uuid:pk>/download/",ExportJobDownloadView.as_view(),name="report-export-job-download"),
 
     path("", include(router.urls)),
 ]

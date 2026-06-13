@@ -9,6 +9,7 @@ from .geology_production_mral_view import *
 from .geology_sample_production import *
 from .geology_sample_crm_certified import *
 from .geology_sample_production_view import *
+from .geology_sample_dome_view import *
 from .geology_waybills_temp import *
 from .geology_waybills import *
 from .geology_waybills_view import *

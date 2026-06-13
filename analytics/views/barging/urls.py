@@ -8,8 +8,8 @@ from ..barging.split_sample.range_re_assay import *
 from .split_sample.range_shipment import *
 from .split_sample.yearly_shipment import *
 
-# Weekly Report
-from ..weekly.get_barging import *
+# management Report
+from ..management.get_barging import *
 
 
 urlpatterns = [
@@ -34,7 +34,7 @@ urlpatterns = [
     path('monitoring/shipment/summary/', shipmentSummaryBuyer),
     path('monitoring/shipment/summary/by-month/', shipmentSummaryByMonth),
 
-    # Weekly
-    path('summary/weekly/', get_barging_weekly),
+    # management
+    path('summary/management/', get_barging_management),
 
 ]

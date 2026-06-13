@@ -1,6 +1,6 @@
-
 CREATE OR REPLACE VIEW view_mining_productions AS 
-SELECT t1.id,
+SELECT 
+	t1.id,
     t1.date_production,
     TRIM(BOTH FROM t1.shift) AS shift,
     TRIM(BOTH FROM t1.vendors) AS vendors,
@@ -21,6 +21,7 @@ SELECT t1.id,
     TRIM(BOTH FROM t1.to_rl) AS to_rl,
     COALESCE(TRIM(BOTH FROM t1.from_rl::text || t1.to_rl::text), ''::text) AS rl,
     TRIM(BOTH FROM t6.name) AS nama_material,
+    TRIM(BOTH FROM t6.categories) AS categories_material,
     t1.ritase,
     round(t1.bcm::numeric, 2) AS bcm,
     t1.tonnage,
@@ -46,21 +47,10 @@ SELECT t1.id,
     t8.username,
     t1.created_at
 FROM mining_productions t1
-LEFT JOIN master_mine_sources_point_loading t3 
-    ON t3.id = t1.loading_point
-    AND t3.iup_id = t1.iup_id
-LEFT JOIN master_mine_sources t2 
-    ON t2.id = t3.id_sources
-    AND t2.iup_id = t1.iup_id
-LEFT JOIN master_mine_sources_point_dumping t4 
-    ON t4.id = t1.dumping_point
-    AND t4.iup_id = t1.iup_id
-LEFT JOIN master_mine_sources_point_dome t5 
-    ON t5.id = t1.dome_id
-    AND t5.iup_id = t1.iup_id
-LEFT JOIN master_materials t6 
-    ON t6.id = t1.id_material
-LEFT JOIN master_mine_iup t7 
-    ON t7.id = t1.iup_id
-LEFT JOIN accounts_user t8 
-    ON t8.id = t1.user_id;
+LEFT JOIN master_mine_sources_point_loading t3 ON t3.id = t1.loading_point AND t3.iup_id = t1.iup_id
+LEFT JOIN master_mine_sources t2 ON t2.id = t3.id_sources AND t2.iup_id = t1.iup_id
+LEFT JOIN master_mine_sources_point_dumping t4 ON t4.id = t1.dumping_point AND t4.iup_id = t1.iup_id
+LEFT JOIN master_mine_sources_point_dome t5 ON t5.id = t1.dome_id AND t5.iup_id = t1.iup_id
+LEFT JOIN master_materials t6 ON t6.id = t1.id_material
+LEFT JOIN master_mine_iup t7 ON t7.id = t1.iup_id
+LEFT JOIN accounts_user t8 ON t8.id = t1.user_id;

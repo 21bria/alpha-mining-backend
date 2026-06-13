@@ -14,6 +14,7 @@ from analytics.services.export.raw import export_geology_ore
 from analytics.services.export.raw import export_geology_waybills
 from analytics.services.export.raw import export_lab_assay_roa
 from analytics.services.export.raw import export_lab_assay_mral
+from analytics.services.export.raw import export_geology_sample_dome
 
 from analytics.services.export.raw import export_mining_plan_productions
 from analytics.services.export.raw import export_mining_productions

@@ -6,4 +6,5 @@ from .selling_adjustment import *
 from .selling_details_view import *
 from .selling_official import *
 from .selling_official_view import *
+from .dome_transfer import *
 

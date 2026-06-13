@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from mining.api.productions.summary import CompareSummaryView
-from mining.api.planing.views import planProductionsViewSet
+from mining.api.plan_production.views import planProductionViewSet
+from mining.api.plan_barging.views import planBargingViewSet
 from mining.api.productions.views import ProductionsViewSet,ProductionsViewCRUDSet
 from mining.api.fuel.views import FuelConsumptionViewSet,FuelConsumptionViewCRUDSet
 from mining.api.weather.views import WeatherViewSet,WeatherCategoryLookupViewSet
@@ -12,7 +13,8 @@ from mining.api.units_activity.views import HmUnitViewSet
 
 
 router = DefaultRouter()
-router.register(r"plan-productions", planProductionsViewSet, basename="plan-productions")
+router.register(r"plan-production", planProductionViewSet, basename="plan-production")
+router.register(r"plan-barging", planBargingViewSet, basename="plan-barging")
 router.register(r"productions", ProductionsViewSet, basename="productions")
 router.register(r"productions-crud", ProductionsViewCRUDSet, basename="productions-crud")
 router.register(r"fuel-daily", FuelConsumptionViewSet, basename="fuel-daily")

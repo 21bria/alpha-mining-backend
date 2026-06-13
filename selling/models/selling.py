@@ -42,6 +42,8 @@ class SellingBarging(BaseTenantModel):
     status_barging      = models.CharField(max_length=50,default='Draft', null=True, blank=True)
     no_input            = models.CharField(max_length=50, default=None, null=True, blank=True)
     description         = models.CharField(max_length=255, default=None, null=True, blank=True)
+    dome_compositing    = models.CharField(max_length=100, default=None, null=True, blank=True)
+    pile_original       = models.IntegerField(default=None, null=True, blank=True)
     user                = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:

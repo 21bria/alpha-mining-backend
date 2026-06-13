@@ -8,6 +8,10 @@ from selling.api.official.views import SellingOfficialViewSet,SellingOfficialCRU
 from selling.api.samples.views import SamplesViewSet,SamplesViewCRUDSet
 from selling.api.adjustment.views import SellingBargingAdjustmentViewSet
 from selling.api.plan.views import BargingPlanViewSet
+from selling.api.transfer.views import DomeTransferViewSet
+from selling.api.transfer.ore_sum_views import TonnageByDomeAPIView
+
+
 
 router = DefaultRouter()
 
@@ -23,10 +27,15 @@ router.register(r"official-view", SellingOfficialViewSet, basename="official-vie
 router.register(r"official", SellingOfficialCRUDViewSet, basename="official-crud")
 router.register(r"samples", SamplesViewSet, basename="samples")
 router.register(r"samples-crud", SamplesViewCRUDSet, basename="samples-crud")
-# Paln Barging
+
+# Plan Barging
 router.register(r"plan-barging", BargingPlanViewSet, basename="plan-barging")
 
+# Transfer / Merge
+router.register(r"dome-transfer", DomeTransferViewSet, basename="dome-transfer")
+
 urlpatterns = [
-     path("barging/tonnage-by-code/", TonnageByCodeAPIView.as_view(), name="barging-tonnage-by-code"),
+    path("ore/tonnage-by-pile/", TonnageByDomeAPIView.as_view()),
+    path("barging/tonnage-by-code/", TonnageByCodeAPIView.as_view(), name="barging-tonnage-by-code"),
     *router.urls,
 ]
