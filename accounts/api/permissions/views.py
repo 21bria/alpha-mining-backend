@@ -12,7 +12,6 @@ class PermissionTreeView(APIView):
     permission_classes = [IsAuthenticated, IsSystemAdmin]
 
     def get(self, request):
-
         # hanya app yang ingin ditampilkan di UI
         ALLOWED_APPS = {
             "accounts",
