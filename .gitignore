@@ -17,3 +17,5 @@ celery.txt
 migrate.txt
 db_vps.txt
 config-server.txt
+
+.vscode

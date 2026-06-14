@@ -215,6 +215,21 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
             return None
 
         return f"PDS{id_material}{unit_truck}{sampling_area}{sampling_point}{batch_code}"
+    
+    def build_kode_psi(self, attrs):
+        sample_type = attrs.get("type", getattr(self.instance, "type", None))
+
+        if str(sample_type or "").upper() != "PSI":
+            return None
+
+        id_material = attrs.get("id_material", getattr(self.instance, "id_material", None))
+        sampling_point = attrs.get("sampling_point", getattr(self.instance, "sampling_point", None))
+        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
+
+        if not id_material  or not sampling_point or not batch_code:
+            return None
+
+        return f"PSI{id_material}{sampling_point}{batch_code}"
 
 
     def validate(self, attrs):
@@ -245,6 +260,7 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
                 })
 
         generated_kode_batch = self.build_kode_batch(attrs)
+        generated_kode_psi = self.build_kode_psi(attrs)
 
         if str(sample_type or "").upper() == "PDS":
             if not generated_kode_batch:
@@ -267,6 +283,25 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
                 })
 
             attrs["kode_batch"] = generated_kode_batch
+        elif str(sample_type or "").upper() == "PSI":
+            if not generated_kode_psi:
+                raise serializers.ValidationError({
+                    "batch_code": "Failed to generate kode PSI. Check material, sampling point, and batch code."
+                })
+
+            if qs.filter(kode_batch__iexact=generated_kode_psi).exists():
+                material_name = self.get_material_name(attrs) or "-"
+                point_name = self.get_sampling_point_name(attrs) or "-"
+                batch = attrs.get("batch_code", getattr(self.instance, "batch_code", None)) or "-"
+
+                raise serializers.ValidationError({
+                    "batch_code": (
+                        f"Duplicate PSI: "
+                        f"{material_name}, {point_name} (Batch {batch})"
+                    )
+                })
+
+            attrs["kode_batch"] = generated_kode_psi
         else:
             attrs["kode_batch"] = None
 

@@ -58,7 +58,7 @@ class SamplesImporter:
         res = ImportResult()
 
         seen_sample: set[tuple[str, str]] = set()
-        seen_kode_batch: set[tuple[Any, str]] = set()
+        seen_kode_batch_pds: set[tuple[Any, str]] = set()
 
         parsed: list[dict[str, Any]] = []
 
@@ -259,10 +259,11 @@ class SamplesImporter:
         db_iup_ids_needed = list(iup_map.values())
 
         existing_sample_keys: set[tuple[Any, str]] = set()
-        existing_batch_keys: set[tuple[Any, str]] = set()
+        existing_pds_batch_keys: set[tuple[Any, str]] = set()
         existing_codes: set[str] = set()
 
         if db_iup_ids_needed:
+            # existing iup + sample_number
             existing_rows = (
                 SampleProductions.objects
                 .annotate(sample_number_l=Lower("sample_number"))
@@ -274,19 +275,21 @@ class SamplesImporter:
                 for iup_id, sample_number_l in existing_rows
             }
 
-            existing_batch_rows = (
+            # existing PDS kode_batch
+            existing_pds_rows = (
                 SampleProductions.objects
-                .annotate(kode_batch_l=Lower("kode_batch"))
-                .filter(iup_id__in=db_iup_ids_needed)
+                .annotate(type_l=Lower("type"), kode_batch_l=Lower("kode_batch"))
+                .filter(iup_id__in=db_iup_ids_needed, type_l="pds")
                 .exclude(kode_batch__isnull=True)
                 .exclude(kode_batch="")
                 .values_list("iup_id", "kode_batch_l")
             )
-            existing_batch_keys = {
+            existing_pds_batch_keys = {
                 (iup_id, kode_batch_l)
-                for iup_id, kode_batch_l in existing_batch_rows
+                for iup_id, kode_batch_l in existing_pds_rows
             }
 
+            # existing code
             existing_codes = set(
                 SampleProductions.objects
                 .filter(iup_id__in=db_iup_ids_needed)
@@ -296,6 +299,7 @@ class SamplesImporter:
             )
 
         # 4. BUILD OBJECTS
+
         to_create: list[SampleProductions] = []
 
         for item in parsed:
@@ -335,6 +339,7 @@ class SamplesImporter:
                 if errors:
                     raise ValueError("; ".join(errors))
 
+                # cek duplicate iup + sample_number
                 db_key = (iup_id, item["sample_number"].casefold())
                 if db_key in existing_sample_keys:
                     raise ValueError(
@@ -342,13 +347,16 @@ class SamplesImporter:
                         f"sample_number '{item['sample_number']}' already exists"
                     )
 
+                # generate code manual karena bulk_create tidak panggil save()
                 code = build_sample_code(item["iup_code"], item["sample_number"])
                 if code in existing_codes:
                     raise ValueError(f"duplicate code in DB: '{code}' already exists")
 
+                # sample_type_final = None
                 sample_type_final = (sample_type_name or "").strip().upper() or None
                 kode_batch = None
 
+                # if sample_type_name == "PDS":
                 if sample_type_final == "PDS":
                     kode_batch = (
                         f"PDS"
@@ -359,30 +367,23 @@ class SamplesImporter:
                         f"{item['batch_code'] or ''}"
                     )
 
-                elif sample_type_final == "PSI":
-                    kode_batch = (
-                        f"PSI"
-                        f"{str(id_material or '')}"
-                        f"{sampling_point or ''}"
-                        f"{item['batch_code'] or ''}"
-                    )
+                    # sample_type_final = "PDS"
+                    if kode_batch:
+                        pds_key = (iup_id, kode_batch.casefold())
 
-                if kode_batch:
-                    batch_key = (iup_id, kode_batch.casefold())
+                        if pds_key in existing_pds_batch_keys:
+                            raise ValueError(
+                                f"duplicate PDS kode_batch in DB: iup_code '{item['iup_code']}', "
+                                f"kode_batch '{kode_batch}' already exists"
+                            )
 
-                    if batch_key in existing_batch_keys:
-                        raise ValueError(
-                            f"duplicate {sample_type_final} kode_batch in DB: "
-                            f"iup_code '{item['iup_code']}', kode_batch '{kode_batch}' already exists"
-                        )
+                        if pds_key in seen_kode_batch_pds:
+                            raise ValueError(
+                                f"duplicate PDS kode_batch in file: iup_code '{item['iup_code']}', "
+                                f"kode_batch '{kode_batch}'"
+                            )
 
-                    if batch_key in seen_kode_batch:
-                        raise ValueError(
-                            f"duplicate {sample_type_final} kode_batch in file: "
-                            f"iup_code '{item['iup_code']}', kode_batch '{kode_batch}'"
-                        )
-
-                    seen_kode_batch.add(batch_key)
+                        seen_kode_batch_pds.add(pds_key)
 
                 obj = SampleProductions(
                     iup_id=iup_id,
@@ -415,14 +416,16 @@ class SamplesImporter:
 
                 to_create.append(obj)
 
+                # tambahkan ke existing set agar tidak duplicate dalam batch import yang sama
                 existing_sample_keys.add(db_key)
                 existing_codes.add(code)
 
-                if kode_batch:
-                    existing_batch_keys.add((iup_id, kode_batch.casefold()))
+                if kode_batch and sample_type_final == "PDS":
+                    existing_pds_batch_keys.add((iup_id, kode_batch.casefold()))
 
             except Exception as e:
                 res.add_error(row_no, raw, str(e))
+
 
         # 5. BULK CREATE
         if to_create:

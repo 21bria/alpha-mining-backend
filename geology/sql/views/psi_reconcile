@@ -1,0 +1,79 @@
+SELECT
+    i.iup_id,
+    i.iup_code,
+    i.stockpile,
+    i.pile_id,
+    i.id_pile,
+    i.nama_material,
+    i.total_ore AS inventory_total_ore,
+    COALESCE(p.psi_allocated_tonnage, 0) AS psi_allocated_tonnage,
+    COALESCE(p.psi_allocated_tonnage, 0) - i.total_ore AS diff_tonnage,
+	ROUND(
+	    (
+	        (
+	            COALESCE(p.psi_allocated_tonnage, 0) - i.total_ore
+	        )
+	        / NULLIF(i.total_ore, 0) * 100
+	    )::numeric,
+	    2
+	) AS diff_tonnage_pct,
+    i.ni::double precision AS inventory_ni,
+    p.ni AS psi_ni,
+    --p.ni - i.ni::double precision AS diff_ni,
+    ROUND(
+	    (
+	        ((p.ni - i.ni::double precision)
+	        / NULLIF(i.ni::double precision, 0))
+	        * 100
+	    )::numeric,
+	    2
+	) AS diff_ni_pct,
+    i.fe::double precision AS inventory_fe,
+    p.fe AS psi_fe,
+   ROUND(
+	    (
+	        ((p.fe - i.fe::double precision)
+	        / NULLIF(i.fe::double precision, 0))
+	        * 100
+	    )::numeric,
+	    2
+	) AS diff_fe_pct,
+    i.mgo::double precision AS inventory_mgo,
+    p.mgo AS psi_mgo,
+    ROUND(
+	    (
+	        ((p.mgo - i.mgo::double precision)
+	        / NULLIF(i.mgo::double precision, 0))
+	        * 100
+	    )::numeric,
+	    2
+	) AS diff_mgo_pct,
+    i.sio2::double precision AS inventory_sio2,
+    p.sio2 AS psi_sio2,
+    ROUND(
+	    (
+	        ((p.sio2 - i.sio2::double precision)
+	        / NULLIF(i.sio2::double precision, 0))
+	        * 100
+	    )::numeric,
+	    2
+	) AS diff_sio2_pct,
+    i.sm::double precision AS inventory_sm,
+    p.sm AS psi_sm,
+    ROUND(
+    (
+        ((p.sm - i.sm::double precision)
+        / NULLIF(i.sm::double precision, 0))
+	        * 100
+	    )::numeric,
+	    2
+	) AS diff_sm_pct,
+    CASE
+        WHEN p.id_pile IS NULL THEN 'NO_PSI'
+        ELSE 'HAS_PSI'
+    END AS psi_status
+FROM view_inventory_by_dome i
+LEFT JOIN view_geology_sample_psi_summary p
+    ON p.iup_id = i.iup_id
+   AND p.id_pile = i.id_pile
+WHERE i.total_ore > 0;
