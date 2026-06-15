@@ -1,5 +1,6 @@
 CREATE OR REPLACE VIEW view_geology_sample_psi AS
 SELECT
+    s.id,
     s.iup_id,
     i.iup_code,
     s.date_sample,
