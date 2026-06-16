@@ -355,9 +355,9 @@ def get_barging_management(request):
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    except DatabaseError:
+    except DatabaseError as e:
         logger.exception("Database query failed.")
-        return JsonResponse({"error": "Database error"}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
 
     except Exception as e:
         logger.exception("Unexpected error in get_barging_management")
