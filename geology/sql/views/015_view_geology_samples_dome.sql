@@ -3,7 +3,8 @@ SELECT t1.id,
     t1.tgl_sample AS date_sample,
     TRIM(BOTH FROM t1.shift) AS shift,
     TRIM(BOTH FROM t2.type_sample) AS type_sample,
-    TRIM(BOTH FROM t2.category) AS category,
+    COALESCE(t2.is_production, false) AS is_production,
+    COALESCE(t2.is_geology, false) AS is_geology,
     TRIM(BOTH FROM t3.sample_method) AS sample_method,
     TRIM(BOTH FROM t4.name) AS material,
     COALESCE(TRIM(BOTH FROM t5.pile_id), ''::text) AS sampling_point,
@@ -41,4 +42,3 @@ SELECT t1.id,
      LEFT JOIN lab_assay_roa t6 ON t6.sample_id::text = t1.sample_number::text AND t6.iup_id = t1.iup_id
      LEFT JOIN master_mine_iup t9 ON t9.id = t1.iup_id
      LEFT JOIN accounts_user t10 ON t10.id = t1.user_id
-  WHERE t2.category IN('geology','production');

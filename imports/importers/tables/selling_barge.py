@@ -21,7 +21,8 @@ from selling.models import SellingBarging
 from imports.utils.parsers import norm, parse_flexible_date, parse_flexible_time
 from imports.utils.converters import to_nullable_float, to_nullable_int
 from imports.utils.json_safe import json_safe_dict
-
+from geology.models import QualityConfig
+from master.services.sample_type import build_pattern
 
 def norm_or_none(value: Any) -> str | None:
     s = norm(value)
@@ -99,9 +100,7 @@ class SellingBargeImporter:
         port_names_needed: set[str] = set()
         unit_code_needed: set[str] = set()
 
-        # =========================================================
         # 1. VALIDATE + COLLECT
-        # =========================================================
         for row_no, row in enumerate(rows, start=1):
             try:
                 iup_code = upper_or_none(row.get("iup_code"))
@@ -212,9 +211,7 @@ class SellingBargeImporter:
         if not parsed:
             return res
 
-        # =========================================================
         # 2. RESOLVE MASTER DATA
-        # =========================================================
         iup_map = {
             code_l: obj_id
             for code_l, obj_id in (
@@ -306,10 +303,17 @@ class SellingBargeImporter:
             )
         }
 
+        quality_config_map = {
+            str(q.adjust_sale).strip().upper(): q
+            for q in QualityConfig.objects.select_related(
+                "material",
+                "selling_sample_type",
+                "monitoring_sample_type",
+            ).filter(is_active=True)
+        }
 
-        # =========================================================
+
         # 3. BUILD OBJECTS
-        # =========================================================
         to_create: list[SellingBarging] = []
 
         for item in parsed:
@@ -377,34 +381,40 @@ class SellingBargeImporter:
                 if errors:
                     raise ValueError("; ".join(errors))
 
-                # =========================
                 # business logic lama
-                # =========================
                 type_selling = item["sale_code"]
                 adjust_sale = item["adjust_sale"]
                 code_lot = item["code_lot"]
                 batch = item["sub_lot"]
                 group_value = item["group_value"] or ""
 
-                if adjust_sale == "RKEF":
-                    material_code_name = "SAP"
-                    type_selling = "SAS"
-                    type_monitoring = "SAS_CKS"
-                elif adjust_sale == "HPAL":
-                    material_code_name = "LIM"
-                    type_selling = "LIS"
-                    type_monitoring = "LIS_CKS"
+                quality_cfg = quality_config_map.get(str(adjust_sale or "").strip().upper())
+
+                if quality_cfg:
+                    material_code_id = quality_cfg.material_id
+                    type_selling = quality_cfg.selling_sample_type.type_sample
+                    type_monitoring = quality_cfg.monitoring_sample_type.type_sample
                 else:
-                    material_code_name = (item["material_name"] or "").upper()
+                    material_code_id = material_id or 0
                     type_monitoring = f"{type_selling}_CKS"
 
-                material_code_id = material_code_map.get(material_code_name.casefold())
-                if material_code_id is None and material_code_name:
-                    # fallback ambil dari material asli
-                    material_code_id = material_id or 0
+                code_batch_in = build_pattern(
+                    quality_cfg.selling_sample_type.batch_pattern if quality_cfg and quality_cfg.selling_sample_type else None,
+                    type=type_selling,
+                    material=str(material_code_id or ""),
+                    lot=code_lot or "",
+                    batch=batch or "",
+                )
 
-                code_batch_in = f"{type_selling}{material_code_id or ''}{code_lot or ''}{batch or ''}"
-                code_monitoring = f"{type_monitoring}{material_code_id or ''}{code_lot or ''}{batch or ''}{group_value}"
+                code_monitoring = build_pattern(
+                    quality_cfg.monitoring_sample_type.batch_pattern if quality_cfg and quality_cfg.monitoring_sample_type else None,
+                    type=type_monitoring,
+                    material=str(material_code_id or ""),
+                    lot=code_lot or "",
+                    batch=batch or "",
+                    increments=group_value,
+                )
+
                 code_batch_ex = f"{type_selling}{material_code_id or ''}Split_CAR{code_lot or ''}{batch or ''}"
                 code_batch_pulp = f"{type_selling}{code_lot or ''}Split_CAR{batch or ''}"
 
@@ -447,9 +457,8 @@ class SellingBargeImporter:
             except Exception as e:
                 res.add_error(row_no, raw, str(e))
 
-        # =========================================================
+   
         # 4. BULK CREATE
-        # =========================================================
         if to_create:
             with transaction.atomic():
                 SellingBarging.objects.bulk_create(to_create, batch_size=300)

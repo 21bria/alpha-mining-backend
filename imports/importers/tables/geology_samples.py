@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 from datetime import date
-
+from django.db.models import Q
 from django.db import transaction
 from django.db.models.functions import Lower
 from core.models.base import make_code
@@ -21,7 +21,6 @@ from geology.models import SampleProductions
 from imports.utils.parsers import (
     norm,
     parse_flexible_date,
-    parse_flexible_time,
 )
 from imports.utils.converters import (
     to_nullable_float,
@@ -29,6 +28,10 @@ from imports.utils.converters import (
 )
 from imports.utils.json_safe import json_safe_dict
 
+from master.services.sample_type import (
+    get_production_geology_sample_type_map,
+    build_pattern,
+)
 
 def norm_or_none(value: Any) -> str | None:
     s = norm(value)
@@ -70,6 +73,7 @@ class SamplesImporter:
         type_names_needed: set[str] = set()
 
         today = date.today()
+        sample_type_map = get_production_geology_sample_type_map()
 
         # 1. VALIDATE + COLLECT
         for row_no, row in enumerate(rows, start=1):
@@ -250,7 +254,11 @@ class SamplesImporter:
             for name_l, obj_id in (
                 SampleType.objects
                 .annotate(name_l=Lower("type_sample"))
-                .filter(name_l__in=type_names_needed)
+                .filter(
+                    Q(is_production=True) | Q(is_geology=True),
+                    name_l__in=type_names_needed,
+                    status=1,
+                )
                 .values_list("name_l", "id")
             )
         }
@@ -349,23 +357,23 @@ class SamplesImporter:
                 sample_type_final = (sample_type_name or "").strip().upper() or None
                 kode_batch = None
 
-                if sample_type_final == "PDS":
-                    kode_batch = (
-                        f"PDS"
-                        f"{str(id_material or '')}"
-                        f"{item['truck'] or ''}"
-                        f"{sampling_area or ''}"
-                        f"{sampling_point or ''}"
-                        f"{item['batch_code'] or ''}"
+                sample_type_cfg = sample_type_map.get(sample_type_final)
+
+                if not sample_type_cfg:
+                    raise ValueError(
+                        f"sample_type '{sample_type_final}' is not active for production/geology"
                     )
 
-                elif sample_type_final == "PSI":
-                    kode_batch = (
-                        f"PSI"
-                        f"{str(id_material or '')}"
-                        f"{sampling_point or ''}"
-                        f"{item['batch_code'] or ''}"
-                    )
+                pattern = sample_type_cfg.get("batch_pattern")
+
+                kode_batch = build_pattern(
+                    pattern,
+                    type=sample_type_final,
+                    material=str(id_material or ""),
+                    truck=item["truck"] or "",
+                    point=str(sampling_point or ""),
+                    batch=item["batch_code"] or "",
+                )
 
                 if kode_batch:
                     batch_key = (iup_id, kode_batch.casefold())

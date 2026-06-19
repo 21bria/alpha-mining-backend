@@ -3,13 +3,26 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class SampleType(models.Model):
-    type_sample = models.CharField(max_length=25, unique=True)
-    description = models.CharField(max_length=250, default=None, null=True, blank=True)
-    status      = models.IntegerField(default=None, null=True, blank=True)
-    category    = models.CharField(max_length=50, default=None, null=True, blank=True)
-    user        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
-    updated_at  = models.DateTimeField(auto_now=True)
+    type_sample   = models.CharField(max_length=25, unique=True)
+    description   = models.CharField(max_length=250, default=None, null=True, blank=True)
+    status        = models.IntegerField(default=None, null=True, blank=True)
+
+    is_production = models.BooleanField(default=True)
+    is_geology    = models.BooleanField(default=True)
+
+    is_selling    = models.BooleanField(default=False)
+    is_monitoring = models.BooleanField(default=False)
+
+    batch_pattern = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Example: {type}{material}{truck}{point}{batch}"
+    )
+
+    user          = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.type_sample
@@ -19,7 +32,10 @@ class SampleType(models.Model):
     
     indexes = [
         models.Index(fields=['type_sample']),
-        models.Index(fields=['category'])
+        models.Index(fields=['category']),
+        models.Index(fields=["is_production"]),
+        models.Index(fields=["is_selling"]),
+        models.Index(fields=["is_monitoring"]),
     ]
 
 

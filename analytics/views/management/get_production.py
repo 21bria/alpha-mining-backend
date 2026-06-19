@@ -169,25 +169,39 @@ def get_summary_dataframe(where_actual, where_plan, params):
     query = f"""
         WITH actual AS (
             SELECT
-                COALESCE(a.categories_material, 'Other') AS material_group,
+                CASE
+                    WHEN COALESCE(a.is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
                 a.nama_material AS material_name,
                 SUM(a.tonnage)::numeric AS actual
             FROM view_mining_productions a
             WHERE {where_actual}
+              AND COALESCE(a.is_production, true) = true
             GROUP BY
-                COALESCE(a.categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(a.is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 a.nama_material
         ),
 
         plan AS (
             SELECT
-                COALESCE(p.categories_material, 'Other') AS material_group,
+                CASE
+                    WHEN COALESCE(p.is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
                 p.material_name AS material_name,
                 SUM(p.tonnage)::numeric AS plan
             FROM view_mining_plan_productions p
             WHERE {where_plan}
+              AND COALESCE(p.is_production, true) = true
             GROUP BY
-                COALESCE(p.categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(p.is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 p.material_name
         )
 

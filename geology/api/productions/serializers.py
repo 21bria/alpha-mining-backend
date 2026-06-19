@@ -4,6 +4,10 @@ from rest_framework import serializers
 from django.db.models import Sum
 from geology.models import OreProductions,OreProductionsView,ProductionsConfig
 from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block
+from master.services.sample_type import (
+    get_production_geology_sample_type_map,
+    build_pattern,
+)
 
 class ProductionsSerializer(serializers.ModelSerializer):
     tonnage = serializers.SerializerMethodField()
@@ -177,35 +181,55 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
 
         pile = SourceMinesDome.objects.filter(id=pile_id).only("dumping").first()
         return pile.dumping_id if pile and pile.dumping_id else None
+    
+    def resolve_original_ids(self, attrs):
+        pile_id = attrs.get(
+            "id_pile",
+            getattr(self.instance, "id_pile", None),
+        )
 
+        stockpile_id = attrs.get(
+            "id_stockpile",
+            getattr(self.instance, "id_stockpile", None),
+        )
+
+        return {
+            "pile_original": pile_id,
+            "stockpile_ori": stockpile_id,
+        }
+    
     def resolve_sale_adjust(self, attrs):
         material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
 
         if not material_id:
             return None
 
-        material = Material.objects.filter(id=material_id).only("name").first()
-        name = (material.name or "").upper() if material else ""
-
-        if "LIM" in name:
-            return "HPAL"
-
-        if "SAP" in name:
-            return "RKEF"
-
-        return None
+        material = Material.objects.filter(id=material_id).only("sale_adjust").first()
+        return material.sale_adjust if material else None
     
     def build_kode_batch(self, attrs):
-        material_id  = attrs.get("id_material", getattr(self.instance, "id_material", None))
-        unit_truck   = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
-        stockpile_id = attrs.get("id_stockpile", getattr(self.instance, "id_stockpile", None))
-        pile_id      = attrs.get("id_pile", getattr(self.instance, "id_pile", None))
-        batch_code   = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
+        material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
+        unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
+        pile_id = attrs.get("id_pile", getattr(self.instance, "id_pile", None))
+        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
 
-        if not material_id or not unit_truck or not stockpile_id or not pile_id or not batch_code:
+        if not material_id or not unit_truck or not pile_id or not batch_code:
             return None
 
-        return f"PDS{material_id}{unit_truck}{stockpile_id}{pile_id}{batch_code}"
+        sample_type_map = get_production_geology_sample_type_map()
+        pds_cfg = sample_type_map.get("PDS")
+
+        if not pds_cfg:
+            return None
+
+        return build_pattern(
+            pds_cfg.get("batch_pattern"),
+            type="PDS",
+            material=str(material_id or ""),
+            truck=unit_truck or "",
+            point=str(pile_id or ""),
+            batch=batch_code or "",
+        )
     
     def update_batch_status(self, instance):
         batch_status = getattr(instance, "batch_status", None)
@@ -238,6 +262,12 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             })
 
         attrs["id_stockpile"] = stockpile_id
+
+        originals = self.resolve_original_ids(attrs)
+
+        attrs["pile_original"] = originals["pile_original"]
+        attrs["stockpile_ori"] = originals["stockpile_ori"]
+        
         # DEFAULT STATUS
         if not attrs.get("pile_status"):
             attrs["pile_status"] = "Continue"

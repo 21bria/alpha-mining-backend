@@ -25,6 +25,10 @@ from imports.utils.parsers import norm, parse_flexible_date
 from imports.utils.converters import to_nullable_float, to_nullable_int
 from imports.utils.json_safe import json_safe_dict
 
+from master.services.sample_type import (
+    get_production_geology_sample_type_map,
+    build_pattern,
+)
 
 def norm_or_none(value: Any) -> str | None:
     s = norm(value)
@@ -67,6 +71,16 @@ class OreProductionImporter:
         truck_types_needed: set[str] = set()
 
         today = date.today()
+        # SAMPLE TYPE CONFIG
+        sample_type_map = get_production_geology_sample_type_map()
+        pds_cfg = sample_type_map.get("PDS")
+
+        if not pds_cfg:
+            raise ValueError(
+                "PDS sample type not configured in SampleType master"
+            )
+
+        pds_pattern = pds_cfg.get("batch_pattern")
 
         # 1. VALIDATE + COLLECT
 
@@ -242,6 +256,16 @@ class OreProductionImporter:
             )
         }
 
+        material_sale_adjust_map = {
+            name_l: sale_adjust
+            for name_l, sale_adjust in (
+                Material.objects
+                .annotate(name_l=Lower("name"))
+                .filter(name_l__in=material_names_needed)
+                .values_list("name_l", "sale_adjust")
+            )
+        }
+
         # 3. RESOLVE ORE TRUCK FACTOR
         # key = (iup_id, type_tf_l, material_id)
 
@@ -303,13 +327,13 @@ class OreProductionImporter:
                 if errors:
                     raise ValueError("; ".join(errors))
 
-                kode_batch = (
-                    f"PDS"
-                    f"{str(id_material or '')}"
-                    f"{item['truck'] or ''}"
-                    f"{str(id_stockpile or '')}"
-                    f"{str(id_pile or '')}"
-                    f"{item['batch'] or ''}"
+                kode_batch = build_pattern(
+                    pds_pattern,
+                    type="PDS",
+                    material=str(id_material or ""),
+                    truck=item["truck"] or "",
+                    point=str(id_pile or ""),
+                    batch=item["batch"] or "",
                 )
 
                 code = build_ore_code(item["iup_code"])
@@ -344,14 +368,19 @@ class OreProductionImporter:
 
                 # left_date = item["date_pds"].day if item["date_pds"] else None
 
-                material_upper = (item["material_name"] or "").upper()
-                if material_upper == "LIM":
-                    sale_adjust = "HPAL"
-                elif material_upper == "SAP":
-                    sale_adjust = "RKEF"
-                else:
-                    sale_adjust = None
+                # material_upper = (item["material_name"] or "").upper()
+                # if material_upper == "LIM":
+                #     sale_adjust = "HPAL"
+                # elif material_upper == "SAP":
+                #     sale_adjust = "RKEF"
+                # else:
+                #     sale_adjust = None
 
+                sale_adjust = (
+                    material_sale_adjust_map.get(item["material_name"].casefold())
+                    if item["material_name"]
+                    else None
+                )
                 # GET CONFIG
                 max_increment = ProductionsConfig.objects.filter(
                     key="MAX_INCREMENT_PRODUCTION"

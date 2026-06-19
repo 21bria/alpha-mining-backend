@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from django.http import JsonResponse
 from django.db import connection, DatabaseError
 from analytics.services.iup_filter import build_iup_clause
+from analytics.utils.date_filter import get_week_range
 
 def resolve_period(request):
     filter_type = request.GET.get("filter_type")
@@ -156,30 +157,18 @@ def get_production_grade(request):
             """
             params = [date_start, date_end, date_start, date_end, *material_params, *op_iup_params]
 
-        elif filter_type == "weekly" and year and month and week:
+        elif filter_type == "weekly" and week:
             try:
-                if "-" in str(week):
-                    year_str, week_str = str(week).split("-")
-                    y = int(year_str)
-                    w = int(week_str)
-
-                    start_date = datetime.strptime(f"{y}-W{w:02d}-1", "%G-W%V-%u")
-                    end_date = start_date + timedelta(days=6)
-                else:
-                    y = int(year)
-                    m = int(month)
-                    w = int(week)
-
-                    first_day = datetime(y, m, 1)
-                    start_date = first_day + timedelta(days=(w - 1) * 7)
-                    end_date = start_date + timedelta(days=6)
-
-                    if end_date.month != m:
-                        next_month = datetime(y, m, 28) + timedelta(days=4)
-                        end_date = datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
-
+                start_date, end_date = get_week_range(
+                    year=year,
+                    month=month,
+                    week=week,
+                )
             except Exception as e:
-                return JsonResponse({"error": f"Invalid week format: {str(e)}"}, status=400)
+                return JsonResponse(
+                    {"error": f"Invalid week format: {str(e)}"},
+                    status=400
+                )
 
             query = f"""
                 WITH tanggal AS (

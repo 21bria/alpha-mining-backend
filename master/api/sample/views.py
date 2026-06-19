@@ -22,15 +22,30 @@ class SampleTypeViewSet(MasterBaseViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.OrderingFilter]
-    ordering_fields = ['id', 'type_sample', 'category', 'status', 'created_at', 'updated_at']
+
+    ordering_fields = [
+        'id',
+        'type_sample',
+        'status',
+        'is_production',
+        'is_geology',
+        'is_selling',
+        'is_monitoring',
+        "batch_pattern",
+        'created_at',
+        'updated_at',
+    ]
+
     ordering = ['type_sample']
     lookup_field = 'id'
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return SampleTypeDetailSerializer
+
         if self.action in ['create', 'update', 'partial_update']:
             return SampleTypeWriteSerializer
+
         return SampleTypeListSerializer
 
     def get_queryset(self):
@@ -45,26 +60,49 @@ class SampleTypeViewSet(MasterBaseViewSet):
             queryset = queryset.prefetch_related(
                 Prefetch(
                     'samplemethod_set',
-                    queryset=SampleMethod.objects.select_related('user', 'sample_type').order_by('sample_method')
+                    queryset=SampleMethod.objects
+                    .select_related('user', 'sample_type')
+                    .order_by('sample_method')
                 )
             )
 
-        category = self.request.query_params.get('category')
         status = self.request.query_params.get('status')
         search = self.request.query_params.get('search')
 
-        if category:
-            queryset = queryset.filter(category__iexact=category.strip())
+        is_production = self.request.query_params.get('is_production')
+        is_geology = self.request.query_params.get('is_geology')
+        is_selling = self.request.query_params.get('is_selling')
+        is_monitoring = self.request.query_params.get('is_monitoring')
 
         if status not in [None, '']:
             queryset = queryset.filter(status=status)
 
+        if is_production not in [None, '']:
+            queryset = queryset.filter(
+                is_production=is_production.lower() == "true"
+            )
+
+        if is_geology not in [None, '']:
+            queryset = queryset.filter(
+                is_geology=is_geology.lower() == "true"
+            )
+
+        if is_selling not in [None, '']:
+            queryset = queryset.filter(
+                is_selling=is_selling.lower() == "true"
+            )
+
+        if is_monitoring not in [None, '']:
+            queryset = queryset.filter(
+                is_monitoring=is_monitoring.lower() == "true"
+            )
+
         if search:
             search = search.strip()
+
             queryset = queryset.filter(
                 Q(type_sample__icontains=search) |
-                Q(description__icontains=search) |
-                Q(category__icontains=search)
+                Q(description__icontains=search)
             )
 
         return queryset

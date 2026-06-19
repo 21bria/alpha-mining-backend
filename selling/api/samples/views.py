@@ -18,19 +18,17 @@ from core.base import BaseViewSet
 from geology.models import SampleProductions,SamplesView
 from imports.models import ImportJob
 from imports.tasks.master_imports import run_import_job
-from master.models import SampleType
+from master.helpers import get_sample_types
 from .serializers import SamplesSerializer,SamplesCRUDSerializer
 from .filters import SamplesFilter
 
 from analytics.models import ExportJob
 from analytics.tasks import run_export_job
 
-def get_selling_types():
-    return SampleType.objects.filter(
-        category="selling",
-        status=1
-    ).values_list("type_sample", flat=True)
-    
+from master.services.sample_type import (
+    get_selling_monitoring_sample_type_map,
+)
+
 class SamplesViewSet(BaseViewSet):
     queryset = SamplesView.objects.none()
     ordering_fields = ["date_sample"]
@@ -64,14 +62,6 @@ class SamplesViewSet(BaseViewSet):
         "material"
     ]
 
-    # def get_queryset(self):
-    #     selling_types = get_selling_types()
-    #     return (
-    #         SamplesView.objects
-    #         .filter(type_sample__in=selling_types)
-    #         .order_by("date_sample")
-    #     )
-    
 
     def _get_iup_id_param(self):
         return self.request.query_params.get("iup_id") or self.request.query_params.get("iup")
@@ -92,13 +82,25 @@ class SamplesViewSet(BaseViewSet):
             return str(allowed_list[0]) if allowed_list else None
 
     def get_queryset(self):
-        selling_types = get_selling_types()
+        # selling_types = get_sample_types(
+        #     is_selling=True,
+        # )
+
+        # qs = (
+        #     self.queryset.model.objects
+        #     .filter(type_sample__in=selling_types)
+        #     .order_by("date_sample")
+        # )
+        sample_type_map = get_selling_monitoring_sample_type_map()
+
+        selling_types = list(sample_type_map.keys())
+
         qs = (
             self.queryset.model.objects
             .filter(type_sample__in=selling_types)
             .order_by("date_sample")
         )
-
+        
         user = self.request.user
         iup_id = self._get_iup_id_param()
 
@@ -161,11 +163,17 @@ class SamplesViewCRUDSet(BaseViewSet):
 
 
     def get_queryset(self):
-        selling_types = get_selling_types()
+        selling_types = get_sample_types(
+            is_selling=True,
+        )
+
         return (
             SampleProductions.objects
             .select_related("iup")
-            .filter(is_deleted=False, type__in=selling_types)
+            .filter(
+                is_deleted=False,
+                type__in=selling_types,
+            )
             .order_by("tgl_sample")
         )
     

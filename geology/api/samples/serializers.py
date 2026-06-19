@@ -2,6 +2,10 @@ from rest_framework import serializers
 import re
 from geology.models import SampleProductions,SamplesView
 from master.models import SourceMinesDumping,SourceMinesDome,Material,SampleMethod,SampleType
+from master.services.sample_type import (
+    get_production_geology_sample_type_map,
+    build_pattern,
+)
 
 class SamplesSerializer(serializers.ModelSerializer):
     class Meta:
@@ -41,12 +45,6 @@ class SamplesSerializer(serializers.ModelSerializer):
         if value is None:
             return "-"
         return f"{float(value):.2f}"
-
-    # def get_delivery_display(self, obj):
-    #     if not obj.delivery:
-    #         return "-"
-    #     dt = timezone.localtime(obj.delivery)
-    #     return dt.strftime("%d-%m-%Y %H:%M")
 
 class SamplesCRUDSerializer(serializers.ModelSerializer):
     iup_code = serializers.CharField(source="iup.iup_code", read_only=True)
@@ -197,39 +195,44 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
 
         row = SourceMinesDome.objects.filter(id=sampling_point_id).only("pile_id").first()
         return row.pile_id if row else None
+    
+    def get_sample_type_cfg(self, attrs):
+        sample_type = self.get_sample_type(attrs)
+        sample_type_name = str(sample_type or "").strip().upper()
 
+        if not sample_type_name:
+            return None
+
+        return get_production_geology_sample_type_map().get(sample_type_name)
 
     def build_kode_batch(self, attrs):
-        sample_type = attrs.get("type", getattr(self.instance, "type", None))
+        sample_type = self.get_sample_type(attrs)
+        if not sample_type:
+            return None
 
-        if str(sample_type or "").upper() != "PDS":
+        sample_type_cfg = self.get_sample_type_cfg(attrs)
+
+        if not sample_type_cfg:
+            return None
+
+        pattern = sample_type_cfg.get("batch_pattern")
+
+        if not pattern:
             return None
 
         id_material = attrs.get("id_material", getattr(self.instance, "id_material", None))
         unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
-        sampling_area = attrs.get("sampling_area", getattr(self.instance, "sampling_area", None))
         sampling_point = attrs.get("sampling_point", getattr(self.instance, "sampling_point", None))
         batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
 
-        if not id_material or not unit_truck or not sampling_area or not sampling_point or not batch_code:
-            return None
-
-        return f"PDS{id_material}{unit_truck}{sampling_area}{sampling_point}{batch_code}"
-    
-    def build_kode_psi(self, attrs):
-        sample_type = attrs.get("type", getattr(self.instance, "type", None))
-
-        if str(sample_type or "").upper() != "PSI":
-            return None
-
-        id_material = attrs.get("id_material", getattr(self.instance, "id_material", None))
-        sampling_point = attrs.get("sampling_point", getattr(self.instance, "sampling_point", None))
-        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
-
-        if not id_material  or not sampling_point or not batch_code:
-            return None
-
-        return f"PSI{id_material}{sampling_point}{batch_code}"
+        return build_pattern(
+            pattern,
+            type=str(sample_type or "").upper(),
+            material=str(id_material or ""),
+            truck=unit_truck or "",
+            point=str(sampling_point or ""),
+            batch=batch_code or "",
+        )
 
 
     def validate(self, attrs):
@@ -260,48 +263,22 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
                 })
 
         generated_kode_batch = self.build_kode_batch(attrs)
-        generated_kode_psi = self.build_kode_psi(attrs)
 
-        if str(sample_type or "").upper() == "PDS":
-            if not generated_kode_batch:
-                raise serializers.ValidationError({
-                    "batch_code": "Failed to generate kode batch for PDS. Check material, method, sampling area, sampling point, and batch code."
-                })
-
+        if generated_kode_batch:
             if qs.filter(kode_batch__iexact=generated_kode_batch).exists():
                 material_name = self.get_material_name(attrs) or "-"
                 method_name = self.get_method_name(attrs) or "-"
-                area_name = self.get_sampling_area_name(attrs) or "-"
                 point_name = self.get_sampling_point_name(attrs) or "-"
                 batch = attrs.get("batch_code", getattr(self.instance, "batch_code", None)) or "-"
 
                 raise serializers.ValidationError({
                     "batch_code": (
                         f"Duplicate batch: "
-                        f"{material_name}, {method_name}, {area_name}, {point_name} (Batch {batch})"
+                        f"{material_name}, {method_name}, {point_name} (Batch {batch})"
                     )
                 })
 
             attrs["kode_batch"] = generated_kode_batch
-        elif str(sample_type or "").upper() == "PSI":
-            if not generated_kode_psi:
-                raise serializers.ValidationError({
-                    "batch_code": "Failed to generate kode PSI. Check material, sampling point, and batch code."
-                })
-
-            if qs.filter(kode_batch__iexact=generated_kode_psi).exists():
-                material_name = self.get_material_name(attrs) or "-"
-                point_name = self.get_sampling_point_name(attrs) or "-"
-                batch = attrs.get("batch_code", getattr(self.instance, "batch_code", None)) or "-"
-
-                raise serializers.ValidationError({
-                    "batch_code": (
-                        f"Duplicate PSI: "
-                        f"{material_name}, {point_name} (Batch {batch})"
-                    )
-                })
-
-            attrs["kode_batch"] = generated_kode_psi
         else:
             attrs["kode_batch"] = None
 

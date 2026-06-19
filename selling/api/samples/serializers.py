@@ -2,6 +2,10 @@ from rest_framework import serializers
 import re
 from geology.models import SampleProductions,SamplesView
 from master.models import SellingCode,StockFactories,Material,SampleMethod,SampleType
+from master.services.sample_type import (
+    get_selling_monitoring_sample_type_map,
+    build_pattern,
+)
 
 class SamplesSerializer(serializers.ModelSerializer):
     class Meta:
@@ -200,59 +204,42 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
         row = SellingCode.objects.filter(id=product_code_id).only("code").first()
         return row.code if row else None
 
+    def get_sample_type_cfg(self, attrs):
+        sample_type = self.get_sample_type(attrs)
+        sample_type_name = str(sample_type or "").strip().upper()
+
+        if not sample_type_name:
+            return None
+
+        return get_selling_monitoring_sample_type_map().get(sample_type_name)
     
-    def get_sample_category(self, attrs):
-        type_sample_id = attrs.get("id_type_sample", getattr(self.instance, "id_type_sample", None))
-
-        if not type_sample_id:
-            return None
-
-        row = SampleType.objects.filter(id=type_sample_id).only("category").first()
-        return row.category if row else None
-
-    def build_kode_batch(self, attrs):
-        sample_type = attrs.get("type", getattr(self.instance, "type", None))
-        sample_type_name = str(sample_type or "").upper()
-
-        id_material = attrs.get("id_material", getattr(self.instance, "id_material", None))
-        code_lot = self.get_code_lot(attrs)
-        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
-
-        if not sample_type_name or not id_material or not code_lot or not batch_code:
-            return None
-
-        return f"{sample_type_name}{id_material}{code_lot}{batch_code}"
-    
-    def build_selling_pulp(self, attrs):
-        sample_type = attrs.get("type", getattr(self.instance, "type", None))
-        sample_type_name = str(sample_type or "").upper()
-
-        code_lot = self.get_code_lot(attrs)
-        batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
-
-        if not sample_type_name or not code_lot or not batch_code:
-            return None
-
-        return f"{sample_type_name}{code_lot}{batch_code}"
-
-    def build_sale_monitoring(self, attrs):
-        
-        sample_type = attrs.get("type", getattr(self.instance, "type", None))
-        sample_type_name = str(sample_type or "").upper()
+    def build_selling_codes(self, attrs, sample_type_cfg):
+        sample_type = self.get_sample_type(attrs)
+        sample_type_name = str(sample_type or "").strip().upper()
 
         id_material = attrs.get("id_material", getattr(self.instance, "id_material", None))
         code_lot = self.get_code_lot(attrs)
         batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
         increments = attrs.get("increments", getattr(self.instance, "increments", None))
 
-        if sample_type_name in {"LIS", "SAS"}:
-            return None
+        generated_code = build_pattern(
+            sample_type_cfg.get("batch_pattern"),
+            type=sample_type_name,
+            material=str(id_material or ""),
+            lot=code_lot or "",
+            batch=batch_code or "",
+            increments=increments or "",
+        )
 
-        if not sample_type_name or not id_material or not code_lot or not batch_code:
-            return None
+        selling_pulp = (
+            f"{sample_type_name}{code_lot or ''}{batch_code or ''}"
+            if sample_type_cfg.get("is_selling")
+            else None
+        )
 
-        return f"{sample_type_name}{id_material}{code_lot}{batch_code}{increments or ''}"
-        
+        return generated_code, selling_pulp
+
+   
     def validate(self, attrs):
         iup = attrs.get("iup") or getattr(self.instance, "iup", None)
         sample_number = attrs.get("sample_number", getattr(self.instance, "sample_number", None))
@@ -276,43 +263,42 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
                 "sample_number": f"Sample number '{sample_number}' already exists in this IUP."
             })
 
-        sample_category = self.get_sample_category(attrs)
+        sample_type_cfg = self.get_sample_type_cfg(attrs)
 
-        generated_kode_batch = self.build_kode_batch(attrs)
-        selling_pulp = self.build_selling_pulp(attrs)
-        sale_monitoring = self.build_sale_monitoring(attrs)
-
-
-        if str(sample_category or "").upper() == "SELLING":
-
-            if not generated_kode_batch:
-                raise serializers.ValidationError({
-                    "batch_code": "Failed to generate kode batch for Selling sample. Check material, product code, and batch code."
-                })
-
-            if qs.filter(kode_batch__iexact=generated_kode_batch).exists():
-
-                material_name = self.get_material_name(attrs) or "-"
-                method_name = self.get_method_name(attrs) or "-"
-                discharge_name = self.get_discharge_name(attrs) or "-"
-                product_code_name = self.get_product_code_name(attrs) or "-"
-                batch = attrs.get("batch_code", getattr(self.instance, "batch_code", None)) or "-"
-
-                raise serializers.ValidationError({
-                    "batch_code": (
-                        f"Duplicate batch: "
-                        f"{material_name}, {method_name}, {discharge_name}, {product_code_name} (Batch {batch})"
-                    )
-                })
-
-            attrs["kode_batch"] = generated_kode_batch
-            attrs["selling_pulp"] = selling_pulp
-            attrs["sale_monitoring"] = sale_monitoring
-
-        else:
+        if not sample_type_cfg:
             attrs["kode_batch"] = None
             attrs["selling_pulp"] = None
             attrs["sale_monitoring"] = None
+        else:
+            generated_code, selling_pulp = self.build_selling_codes(
+                attrs,
+                sample_type_cfg,
+            )
+
+            if sample_type_cfg.get("is_selling"):
+                if not generated_code:
+                    raise serializers.ValidationError({
+                        "batch_code": "Failed to generate kode batch for Selling sample. Check material, product code, batch code, and batch pattern."
+                    })
+
+                if qs.filter(kode_batch__iexact=generated_code).exists():
+                    raise serializers.ValidationError({
+                        "batch_code": "Duplicate selling batch."
+                    })
+
+                attrs["kode_batch"] = generated_code
+                attrs["selling_pulp"] = selling_pulp
+                attrs["sale_monitoring"] = None
+
+            elif sample_type_cfg.get("is_monitoring"):
+                if not generated_code:
+                    raise serializers.ValidationError({
+                        "batch_code": "Failed to generate sale monitoring. Check material, product code, batch code, increments, and batch pattern."
+                    })
+
+                attrs["kode_batch"] = None
+                attrs["selling_pulp"] = None
+                attrs["sale_monitoring"] = generated_code
 
         attrs["sample_dup"] = self.extract_sample_dup(attrs)
         return attrs

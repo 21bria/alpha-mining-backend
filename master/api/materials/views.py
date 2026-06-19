@@ -21,10 +21,10 @@ class MaterialViewSet(MasterBaseViewSet):
 
     pagination_class = StandardResultsSetPagination
     filter_backends  = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields    = ["name","categories","description"]
+    search_fields    = ["name","is_production","is_ore","sale_adjust","description"]
     ordering_fields  = ["id", "name"]
 
-    export_fields    = ["id", "name","categories", "description"]
+    export_fields    = ["id", "name","is_production","is_ore","sale_adjust","description"]
     template_headers = ["name", "description"]
 
     soft_delete_field = None

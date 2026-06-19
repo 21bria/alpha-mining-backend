@@ -19,22 +19,13 @@ from core.pagination import StandardResultsSetPagination
 from core.base import BaseViewSet
 
 from geology.models import SamplesDomeView
-from master.models import SampleType
+from master.helpers import get_sample_types
 
 from .serializers import SamplesDomeSerializer
 from .filters import SamplesFilter
 
 from analytics.models import ExportJob
 from analytics.tasks import run_export_job
-
-
-def get_sample_types(categories=None):
-    qs = SampleType.objects.filter(status=1)
-
-    if categories:
-        qs = qs.filter(category__in=categories)
-
-    return list(qs.values_list("type_sample", flat=True))
 
 
 class SamplesDomeViewSet(BaseViewSet):
@@ -89,14 +80,16 @@ class SamplesDomeViewSet(BaseViewSet):
             return str(allowed_list[0]) if allowed_list else None
 
     def get_queryset(self):
-        sample_types = get_sample_types(["production", "geology"])
-
         qs = (
             self.queryset.model.objects
-            .filter(type_sample__in=sample_types)
+            .filter(
+                type_sample__in=get_sample_types(
+                    is_production=True,
+                    is_geology=True,
+                )
+            )
             .order_by("date_sample")
         )
-
         user = self.request.user
         iup_id = self._get_iup_id_param()
 

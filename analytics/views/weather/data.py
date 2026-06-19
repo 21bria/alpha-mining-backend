@@ -8,6 +8,8 @@ from django.db.utils import DatabaseError
 import calendar
 logger = logging.getLogger(__name__) 
 from analytics.services.iup_filter import build_iup_clause
+from analytics.utils.date_filter import get_week_range
+
 def parse_iso_week(week_value: str):
     year_str, week_str = str(week_value).split("-")
     return int(year_str), int(week_str)
@@ -40,40 +42,15 @@ def get_data_weather(request):
             filter_sql += " AND w.date BETWEEN %s AND %s"
             params += [date_start, date_end]
 
-        elif filter_type == "weekly" and year and month and week:
+        elif filter_type == "weekly" and week:
             try:
-                # ISO week: contoh 2026-14
-                if "-" in str(week):
-                    year_str, week_str = str(week).split("-")
-                    year = int(year_str)
-                    week = int(week_str)
-
-                    start_date = datetime.strptime(f"{year}-W{week:02}-1", "%G-W%V-%u")
-                    end_date = start_date + timedelta(days=6)
-
-                else:
-                    year = int(year)
-                    month = int(month)
-                    week = int(week)
-
-                    if not (1 <= month <= 12):
-                        return JsonResponse({"error": "Bulan tidak valid (1–12)"}, status=400)
-                    if not (1 <= week <= 5):
-                        return JsonResponse({"error": "Minggu tidak valid (1–5)"}, status=400)
-
-                    first_day = datetime(year, month, 1)
-                    start_date = first_day + timedelta(days=(week - 1) * 7)
-                    end_date = start_date + timedelta(days=6)
-
-                    if end_date.month != month:
-                        next_month = datetime(year, month, 28) + timedelta(days=4)
-                        end_date = datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
-
-            except Exception as e:
-                return JsonResponse(
-                    {"error": f"Format tahun/bulan/minggu tidak valid: {str(e)}"},
-                    status=400
+                start_date, end_date = get_week_range(
+                    year=year,
+                    month=month,
+                    week=week,
                 )
+            except Exception as e:
+                return JsonResponse({"error": str(e)}, status=400)
 
             filter_sql += " AND w.date BETWEEN %s AND %s"
             params += [start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")]
@@ -144,39 +121,15 @@ def get_data_rainfall(request):
             filter_sql += " AND r.date BETWEEN %s AND %s"
             params += [date_start, date_end]
 
-        elif filter_type == "weekly" and year and month and week:
+        elif filter_type == "weekly" and week:
             try:
-                if "-" in str(week):
-                    year_str, week_str = str(week).split("-")
-                    year = int(year_str)
-                    week = int(week_str)
-
-                    start_date = datetime.strptime(f"{year}-W{week:02}-1", "%G-W%V-%u")
-                    end_date = start_date + timedelta(days=6)
-
-                else:
-                    year = int(year)
-                    month = int(month)
-                    week = int(week)
-
-                    if not (1 <= month <= 12):
-                        return JsonResponse({"error": "Bulan tidak valid (1–12)"}, status=400)
-                    if not (1 <= week <= 5):
-                        return JsonResponse({"error": "Minggu tidak valid (1–5)"}, status=400)
-
-                    first_day = datetime(year, month, 1)
-                    start_date = first_day + timedelta(days=(week - 1) * 7)
-                    end_date = start_date + timedelta(days=6)
-
-                    if end_date.month != month:
-                        next_month = datetime(year, month, 28) + timedelta(days=4)
-                        end_date = datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
-
-            except Exception as e:
-                return JsonResponse(
-                    {"error": f"Format tahun/bulan/minggu tidak valid: {str(e)}"},
-                    status=400
+                start_date, end_date = get_week_range(
+                    year=year,
+                    month=month,
+                    week=week,
                 )
+            except Exception as e:
+                return JsonResponse({"error": str(e)}, status=400)
 
             filter_sql += " AND r.date BETWEEN %s AND %s"
             params += [start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")]
@@ -226,34 +179,34 @@ def get_data_rainfall(request):
 # For Chart
 def get_chart_rainfall(request):
     iup_filter   = request.GET.get("iup_id") or request.GET.get("iup_filter")
-    filter_type  = request.GET.get('filter_type')
-    filter_year  = int(request.GET.get('year', 0))
-    filter_month = int(request.GET.get('month', 0))
-    filter_week  = request.GET.get('week')
-    filter_date  = request.GET.get('filter_date')
-    date_start   = request.GET.get('date_start')
-    date_end     = request.GET.get('date_end')
+    filter_type  = request.GET.get("filter_type")
+    filter_year  = int(request.GET.get("year", 0) or 0)
+    filter_month = int(request.GET.get("month", 0) or 0)
+    filter_week  = request.GET.get("week")
+    filter_date  = request.GET.get("filter_date")
+    date_start   = request.GET.get("date_start")
+    date_end     = request.GET.get("date_end")
 
-    if filter_type == 'monthly' and filter_year and filter_month:
-        return get_monthly_chart(filter_year, filter_month,iup_filter)
-    
-    elif filter_type == 'daily' and filter_date:
+    if filter_type == "monthly" and filter_year and filter_month:
+        return get_monthly_chart(filter_year, filter_month, iup_filter)
+
+    elif filter_type == "daily" and filter_date:
         return get_daily_chart(filter_date, iup_filter)
 
-    elif filter_type == 'range' and date_start and date_end:
+    elif filter_type == "range" and date_start and date_end:
         return get_range_chart(date_start, date_end, iup_filter)
 
-    elif filter_type == 'yearly' and filter_year:
-        return get_yearly_chart(filter_year)
+    elif filter_type == "yearly" and filter_year:
+        return get_yearly_chart(filter_year, iup_filter)
 
-    elif filter_type == "weekly" and filter_year and filter_month and filter_week:
+    elif filter_type == "weekly" and filter_week:
         return get_weekly_chart(filter_year, filter_month, filter_week, iup_filter)
 
-    elif filter_type == 'all':
+    elif filter_type == "all":
         return get_all_chart(iup_filter)
 
     else:
-        return JsonResponse({'error': 'Invalid filter'}, status=400)
+        return JsonResponse({"error": "Invalid filter"}, status=400)
 
 def get_daily_chart(filter_date, iup_filter=None):
     where_sql = "r.date = %s::date"
@@ -397,26 +350,20 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
 
 def get_weekly_chart(filter_year, filter_month, filter_week, iup_filter=None):
     try:
-        if "-" in str(filter_week):
-            iso_year, iso_week = parse_iso_week(filter_week)
-            start_date = datetime.strptime(f"{iso_year}-W{iso_week:02}-1", "%G-W%V-%u").date()
-            end_date = start_date + timedelta(days=6)
-        else:
-            year = int(filter_year)
-            month = int(filter_month)
-            week = int(filter_week)
-
-            first_day = date(year, month, 1)
-            start_date = first_day + timedelta(days=(week - 1) * 7)
-            end_date = start_date + timedelta(days=6)
-
-            if end_date.month != month:
-                next_month = datetime(year, month, 28) + timedelta(days=4)
-                end_date = (datetime(next_month.year, next_month.month, 1) - timedelta(days=1)).date()
+        start_date, end_date = get_week_range(
+            year=filter_year,
+            month=filter_month,
+            week=filter_week,
+            as_date=True,
+        )
 
     except Exception as e:
-        return JsonResponse({"error": f"Format minggu tidak valid: {str(e)}"}, status=400)
+        return JsonResponse(
+            {"error": f"Format minggu tidak valid: {str(e)}"},
+            status=400
+        )
 
+    
     where_sql = "r.date BETWEEN %s AND %s"
     params = [start_date, end_date]
 

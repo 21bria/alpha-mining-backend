@@ -31,11 +31,11 @@ def convert_numeric_fields(rows, numeric_fields):
     return rows
  
 def build_inventory_raw_filters(request, forced_material=None):
-    iup_filter = request.GET.get("iup_id")
+    iup_filter      = request.GET.get("iup_id")
     material_filter = forced_material or request.GET.get("material")
-    area_filter = request.GET.get("areaFilter")
-    point_filter = request.GET.getlist("pointFilter")
-    cut_date = request.GET.get("date") or request.GET.get("cut_date")
+    area_filter     = request.GET.get("areaFilter")
+    point_filter    = request.GET.getlist("pointFilter")
+    cut_date        = request.GET.get("date") or request.GET.get("cut_date")
 
     if not iup_filter:
         return None, None, None, JsonResponse({"error": "iup_id wajib diisi"}, status=400)

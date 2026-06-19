@@ -28,6 +28,7 @@ SELECT
     t1.created_at,
     COALESCE(TRIM(BOTH FROM t7.sample_number), 'Unprepared'::text) AS sample_number,
     t1.direct,
+    t1.kode_batch,
     t1.iup_id,
     t8.iup_code,
     t8.iup_name,

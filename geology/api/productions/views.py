@@ -181,7 +181,16 @@ class ProductionsViewCRUDSet(BaseViewSet):
         )
 
         # SYSTEM / SUPERADMIN / MANAGEMENT
+        # if getattr(user, "is_system", False) or getattr(user, "is_superuser", False):
+
+        #     if not iup_id:
+        #         return Response(
+        #             {"detail": "IUP is required."},
+        #             status=status.HTTP_400_BAD_REQUEST,
+        #         )
         if getattr(user, "is_system", False) or getattr(user, "is_superuser", False):
+            if not iup_id:
+                iup_id = data[0].get("iup") or data[0].get("iup_id")
 
             if not iup_id:
                 return Response(

@@ -121,12 +121,13 @@ def summary_materials_grouped(
     )
 
     query = f"""
-        SELECT 
+       SELECT 
             mp.nama_material,
             SUM(COALESCE(mp.ritase, 0)) AS total_ritase,
             SUM(COALESCE(mp.tonnage, 0)) AS total_tonnage
         FROM view_mining_productions mp
         WHERE {where_clause}
+        AND COALESCE(mp.is_production, true) = true
         GROUP BY mp.nama_material
         ORDER BY mp.nama_material;
     """

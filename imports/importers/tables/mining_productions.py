@@ -120,7 +120,7 @@ class MiningProductionImporter:
 
         today = date.today()
 
-        # =========================================================
+
         # 1. VALIDATE + COLLECT
         # =========================================================
         for row_no, row in enumerate(rows, start=1):
@@ -241,9 +241,7 @@ class MiningProductionImporter:
         if not parsed:
             return res
 
-        # =========================================================
         # 2. RESOLVE MASTER DATA
-        # =========================================================
         iup_map = {
             code_l: obj_id
             for code_l, obj_id in (
@@ -317,13 +315,19 @@ class MiningProductionImporter:
         material_map = {
             name_l: {
                 "id": obj_id,
-                "categories": categories,
+                "is_ore": is_ore,
+                "is_production": is_production,
             }
-            for name_l, obj_id, categories in (
+            for name_l, obj_id, is_ore, is_production in (
                 Material.objects
                 .annotate(name_l=Lower("name"))
                 .filter(name_l__in=material_names_needed)
-                .values_list("name_l", "id", "categories")
+                .values_list(
+                    "name_l",
+                    "id",
+                    "is_ore",
+                    "is_production",
+                )
             )
         }
 
@@ -358,9 +362,7 @@ class MiningProductionImporter:
             if type_unit and material
         }
 
-        # =========================================================
         # 3. BUILD OBJECTS
-        # =========================================================
         to_create: list[mineProductions] = []
 
         for item in parsed:
@@ -410,8 +412,10 @@ class MiningProductionImporter:
                     material_map.get(item["material_name"].casefold())
                     if item["material_name"] else None
                 )
+
                 id_material = material_obj["id"] if material_obj else None
-                material_category = material_obj["categories"] if material_obj else None
+                is_ore = material_obj["is_ore"] if material_obj else False
+                is_production = material_obj["is_production"] if material_obj else True
 
                 if item["iup_code"] and iup_id is None:
                     errors.append(f"iup_code '{item['iup_code']}' not found")
@@ -438,11 +442,14 @@ class MiningProductionImporter:
                 if item["pile_id"] and id_dome is None:
                     errors.append(f"pile_id '{item['pile_id']}' not found")
 
-                if (
-                    material_category
-                    and str(material_category).strip().upper() == "ORE"
-                    and not item["pile_id"]
-                ):
+                # if (
+                #     material_category
+                #     and str(material_category).strip().upper() == "ORE"
+                #     and not item["pile_id"]
+                # ):
+
+                is_ore = bool(material_obj.get("is_ore")) if material_obj else False
+                if is_ore and not item["pile_id"]:
                     errors.append(
                         f"pile_id is required for ORE material '{item['material_name']}'"
                     )
@@ -503,7 +510,7 @@ class MiningProductionImporter:
                     loading_point=id_loading,
                     dumping_point=id_dumping,
                     dome_id=id_dome,
-                    category_mine=material_category or item["category_mine"],
+                    category_mine=item["category_mine"],
                     time_loading=item["time_loading"],
                     left_loading=item["left_loading"],
                     from_rl=item["rl_from"],
@@ -525,9 +532,7 @@ class MiningProductionImporter:
             except Exception as e:
                 res.add_error(row_no, raw, str(e))
 
-        # =========================================================
         # 4. BULK CREATE
-        # =========================================================
         if to_create:
             with transaction.atomic():
                 mineProductions.objects.bulk_create(to_create, batch_size=1000)

@@ -2,17 +2,22 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
-
+from django.db.models import Q
 from django.db import transaction
 from django.db.models.functions import Lower
 
 from master.models import MineIUP, Material,SampleMethod, SampleType,SellingCode,StockFactories
-from geology.models import SampleProductions
+from geology.models import SampleProductions,QualityConfig
 from core.models.base import make_code # lokasi function
 
 from imports.utils.parsers import norm, parse_flexible_date, parse_flexible_time
 from imports.utils.converters import to_nullable_float, to_nullable_int
 from imports.utils.json_safe import json_safe_dict
+
+from master.services.sample_type import (
+    get_selling_monitoring_sample_type_map,
+    build_pattern,
+)
 
 
 def norm_or_none(value: Any) -> str | None:
@@ -27,16 +32,6 @@ def upper_or_none(value: Any) -> str | None:
 
 def build_sample_code(iup_code: str, sample_number: str) -> str:
     return make_code(iup_code, sample_number)
-
-
-def get_selling_type_names() -> set[str]:
-    return {
-        str(x).strip().upper()
-        for x in SampleType.objects.filter(
-            category__iexact="selling",
-            status=1
-        ).values_list("type_sample", flat=True)
-    }
 
 
 @dataclass
@@ -68,10 +63,10 @@ class SamplesSellingImporter:
         buyer_needed: set[str] = set()
 
         today = date.today()
-        selling_types = get_selling_type_names()
+        sample_type_map = get_selling_monitoring_sample_type_map()
 
-        if not selling_types:
-            res.add_error(0, {}, "No active selling sample types found in SampleType category='selling'")
+        if not sample_type_map:
+            res.add_error(0,{},"No active selling/monitoring sample types found. Please set is_selling=True or is_monitoring=True in SampleType master." )
             return res
 
         # 1. VALIDATE + COLLECT
@@ -108,10 +103,11 @@ class SamplesSellingImporter:
                         f"date_sample '{tgl_sample}' cannot be greater than today '{today}'"
                     )
 
-                if sample_type_name not in selling_types:
+                sample_type_cfg = sample_type_map.get( str(sample_type_name).strip().upper())
+
+                if not sample_type_cfg:
                     raise ValueError(
-                        f"sample_type '{sample_type_name}' is not allowed for selling import. "
-                        f"Allowed types: {', '.join(sorted(selling_types))}"
+                        f"sample_type '{sample_type_name}' is not active for selling/monitoring"
                     )
 
                 batch_code = norm_or_none(row.get("sub_lot"))
@@ -210,7 +206,11 @@ class SamplesSellingImporter:
             for name_l, obj_id in (
                 SampleType.objects
                 .annotate(name_l=Lower("type_sample"))
-                .filter(name_l__in=type_names_needed, category__iexact="selling")
+                .filter(
+                    Q(is_selling=True) | Q(is_monitoring=True),
+                    name_l__in=type_names_needed,
+                    status=1,
+                )
                 .values_list("name_l", "id")
             )
         }
@@ -302,7 +302,7 @@ class SamplesSellingImporter:
                 factory_id = factory_map.get(buyer_name.casefold()) if buyer_name else None
 
                 if sample_type_name and id_type_sample is None:
-                    errors.append(f"sample_type '{sample_type_name}' not found in category selling")
+                    errors.append(f"sample_type '{sample_type_name}' not found or not marked as selling/monitoring")
                 if sample_method_name and id_method is None:
                     errors.append(f"sampling_method '{sample_method_name}' not found")
                 if material_name and id_material is None:
@@ -329,54 +329,43 @@ class SamplesSellingImporter:
                     raise ValueError(f"duplicate code in DB: '{code}' already exists")
 
                 # selling logic
-                kode_batch = (
-                    f"{sample_type_name or ''}"
-                    f"{str(id_material or '')}"
-                    f"{code_lot_name or ''}"
-                    f"{item['batch_code'] or ''}"
-                )
+                sample_type_cfg = sample_type_map.get(str(sample_type_name or "").strip().upper() )
 
-                selling_pulp = (
-                    f"{sample_type_name or ''}"
-                    f"{code_lot_name or ''}"
-                    f"{item['batch_code'] or ''}"
-                )
-
-                sale_monitoring = (
-                    f"{sample_type_name or ''}"
-                    f"{str(id_material or '')}"
-                    f"{code_lot_name or ''}"
-                    f"{item['batch_code'] or ''}"
-                    f"{item['increments'] or ''}"
-                )
-
-                # kalau LIS / SAS, sesuai logic lama:
-                # LIS & SAS -> sale_monitoring None
-                # selling logic
-                if sample_type_name in {"LIS", "SAS"}:
-                    kode_batch = (
-                        f"{sample_type_name or ''}"
-                        f"{str(id_material or '')}"
-                        f"{code_lot_name or ''}"
-                        f"{item['batch_code'] or ''}"
+                if not sample_type_cfg:
+                    raise ValueError(
+                        f"sample_type '{sample_type_name}' is not active for selling/monitoring"
                     )
+
+                pattern = sample_type_cfg.get("batch_pattern")
+
+                generated_code = build_pattern(
+                    pattern,
+                    type=sample_type_name or "",
+                    material=str(id_material or ""),
+                    lot=code_lot_name or "",
+                    batch=item["batch_code"] or "",
+                    increments=item["increments"] or "",
+                )
+
+                if sample_type_cfg["is_selling"]:
+                    kode_batch = generated_code
                     selling_pulp = (
                         f"{sample_type_name or ''}"
                         f"{code_lot_name or ''}"
                         f"{item['batch_code'] or ''}"
                     )
                     sale_monitoring = None
-                else:
+
+                elif sample_type_cfg["is_monitoring"]:
                     kode_batch = None
                     selling_pulp = None
-                    sale_monitoring = (
-                        f"{sample_type_name or ''}"
-                        f"{str(id_material or '')}"
-                        f"{code_lot_name or ''}"
-                        f"{item['batch_code'] or ''}"
-                        f"{item['increments'] or ''}"
-                    )
+                    sale_monitoring = generated_code
 
+                else:
+                    raise ValueError(
+                        f"sample_type '{sample_type_name}' is not selling or monitoring"
+                    )
+                
                 if kode_batch:
                     batch_key = (iup_id, kode_batch.casefold())
 

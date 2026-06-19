@@ -23,8 +23,9 @@ from master.api.ore_fill_factors.views import OreTruckFactorViewSet
 from master.api.sample.views import SampleTypeViewSet, SampleMethodViewSet
 from master.api.grade_control.views import MineGeologiesViewSet
 
+from master.api.settings.production.views import ProductionConfigViewSet
+from master.api.settings.quality.views import QualityConfigViewSet
 
-  
 
 
 router = DefaultRouter()
@@ -51,6 +52,9 @@ router.register(r"fill-factors", OreTruckFactorViewSet, basename="fill-factors")
 router.register(r'sample-types', SampleTypeViewSet, basename='sample-types')
 router.register(r'sample-methods', SampleMethodViewSet,basename='sample-method')
 router.register(r'grade-control', MineGeologiesViewSet,basename='grade-control')
+
+router.register(r"production-config",ProductionConfigViewSet,basename="production-config")
+router.register(r"quality-config",QualityConfigViewSet,basename="quality-config")
 
 urlpatterns = [
     path("lookups/", include("master.api.lookups.urls")),  # call urls lookups ini penting

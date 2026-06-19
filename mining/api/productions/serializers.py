@@ -8,7 +8,11 @@ class ProductionsSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "iup_id", "iup_code", "iup_name",
+
             "category_mine",
+            "is_ore",
+            "is_production",
+            
             "date_production",
             "shift",
 

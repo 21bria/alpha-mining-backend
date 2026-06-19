@@ -230,38 +230,48 @@ def get_summary_dataframe(where_actual, where_plan, group_actual, group_plan, pa
         WITH actual AS (
             SELECT
                 {group_actual} AS periode,
+
                 SUM(
                     CASE
-                        WHEN LOWER(COALESCE(categories_material, '')) = 'ore'
-                        THEN tonnage ELSE 0
+                        WHEN COALESCE(a.is_ore, false) = true
+                         AND COALESCE(a.is_production, true) = true
+                        THEN a.tonnage ELSE 0
                     END
                 )::numeric AS ore,
+
                 SUM(
                     CASE
-                        WHEN LOWER(COALESCE(categories_material, '')) <> 'ore'
-                        THEN tonnage ELSE 0
+                        WHEN COALESCE(a.is_ore, false) = false
+                         AND COALESCE(a.is_production, true) = true
+                        THEN a.tonnage ELSE 0
                     END
                 )::numeric AS non_ore
+
             FROM view_mining_productions a
             WHERE {where_actual}
             GROUP BY {group_actual}
         ),
+
         plan AS (
             SELECT
                 {group_plan} AS periode,
 
                 SUM(
                     CASE
-                        WHEN LOWER(COALESCE(categories_material, '')) = 'ore'
-                        THEN tonnage ELSE 0
+                        WHEN COALESCE(p.is_ore, false) = true
+                         AND COALESCE(p.is_production, true) = true
+                        THEN p.tonnage ELSE 0
                     END
                 )::numeric AS ore_plan,
+
                 SUM(
                     CASE
-                        WHEN LOWER(COALESCE(categories_material, '')) <> 'ore'
-                        THEN tonnage ELSE 0
+                        WHEN COALESCE(p.is_ore, false) = false
+                         AND COALESCE(p.is_production, true) = true
+                        THEN p.tonnage ELSE 0
                     END
                 )::numeric AS non_ore_plan
+
             FROM view_mining_plan_productions p
             WHERE {where_plan}
             GROUP BY {group_plan}
@@ -471,6 +481,7 @@ def get_daily_chart(filter_date, iup_filter=None):
                 SUM(mp.tonnage) AS total_tonnage
             FROM view_mining_productions mp
             WHERE {where_actual}
+            AND COALESCE(mp.is_production, true) = true
             GROUP BY LPAD(mp.t_load::text, 2, '0')
         ),
 
@@ -482,6 +493,7 @@ def get_daily_chart(filter_date, iup_filter=None):
                 ) AS plan_data
             FROM view_mining_plan_productions p
             WHERE {where_plan}
+            AND COALESCE(p.is_production, true) = true
         )
 
         SELECT
@@ -547,8 +559,17 @@ def get_chart_ore_quality(request):
     return JsonResponse({"error": "Invalid filter"}, status=400)
 
 def get_daily_ore_chart(filter_date, iup_filter=None):
-    where_actual = "mp.date_production = %s::date AND LOWER(COALESCE(mp.categories_material, '')) = 'ore'"
-    where_plan = "p.date_plan = %s::date AND LOWER(COALESCE(p.categories_material, '')) = 'ore'"
+    where_actual = """
+        mp.date_production = %s::date
+        AND COALESCE(mp.is_ore, false) = true
+        AND COALESCE(mp.is_production, true) = true
+    """
+
+    where_plan = """
+        p.date_plan = %s::date
+        AND COALESCE(p.is_ore, false) = true
+        AND COALESCE(p.is_production, true) = true
+    """
 
     actual_params = [filter_date]
     plan_params = [filter_date]
@@ -680,6 +701,7 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
                 SUM(tonnage) AS tonnage
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
             GROUP BY date_production::date
         ),
         plan AS (
@@ -688,6 +710,7 @@ def get_monthly_chart(filter_year, filter_month, iup_filter=None):
                 SUM(tonnage) AS plan_data
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
             GROUP BY date_plan::date
         )
         SELECT
@@ -756,16 +779,20 @@ def get_weekly_chart(filter_week, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore,
+
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore
+
             FROM view_mining_productions
             WHERE {where_actual}
             GROUP BY DATE(date_production)
@@ -776,16 +803,20 @@ def get_weekly_chart(filter_week, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore_plan,
+
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore_plan
+
             FROM view_mining_plan_productions
             WHERE {where_plan}
             GROUP BY DATE(date_plan)
@@ -911,14 +942,16 @@ def get_range_chart(date_start, date_end, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore,
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore
@@ -934,14 +967,16 @@ def get_range_chart(date_start, date_end, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore_plan,
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore_plan
@@ -1074,14 +1109,16 @@ def get_yearly_chart(yearly, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore,
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore
@@ -1097,14 +1134,16 @@ def get_yearly_chart(yearly, iup_filter=None):
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'ore'
+                        WHEN COALESCE(is_ore, false) = true
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS ore_plan,
 
                 SUM(
                     CASE
-                        WHEN LOWER(TRIM(COALESCE(categories_material, ''))) = 'non ore'
+                        WHEN COALESCE(is_ore, false) = false
+                        AND COALESCE(is_production, true) = true
                         THEN tonnage ELSE 0
                     END
                 )::numeric AS non_ore_plan
@@ -1221,6 +1260,7 @@ def get_all_chart(iup_filter=None):
                 SUM(tonnage) AS total_tonnage
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
             GROUP BY TO_CHAR(date_production, 'YYYY')
         ),
 
@@ -1230,6 +1270,7 @@ def get_all_chart(iup_filter=None):
                 SUM(tonnage) AS plan_data
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
             GROUP BY TO_CHAR(date_plan, 'YYYY')
         )
 

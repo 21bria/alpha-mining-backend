@@ -19,21 +19,12 @@ from imports.tasks.master_imports import run_import_job
 from core.permissions import GlobalMasterPermission, RoleReadOnlyForViewer, IUPObjectPermission,user_allowed_iup_ids
 from core.pagination import StandardResultsSetPagination
 from core.base import BaseViewSet
-from master.models import SampleType
+from master.helpers import get_sample_types
 from .serializers import SamplesSerializer,SamplesCRUDSerializer
 from .filters import SamplesFilter
 
 from analytics.models import ExportJob
 from analytics.tasks import run_export_job
-
-
-def get_sample_types(categories=None):
-    qs = SampleType.objects.filter(status=1)
-
-    if categories:
-        qs = qs.filter(category__in=categories)
-
-    return list(qs.values_list("type_sample", flat=True))
 
 
 class SamplesViewSet(BaseViewSet):
@@ -88,11 +79,14 @@ class SamplesViewSet(BaseViewSet):
             return str(allowed_list[0]) if allowed_list else None
 
     def get_queryset(self):
-        sample_types = get_sample_types(["production", "geology"])
-
         qs = (
             self.queryset.model.objects
-            .filter(type_sample__in=sample_types)
+            .filter(
+                type_sample__in=get_sample_types(
+                    is_production=True,
+                    is_geology=True,
+                )
+            )
             .order_by("date_sample")
         )
 
@@ -156,13 +150,20 @@ class SamplesViewCRUDSet(BaseViewSet):
     range_delete_iup_field = "iup_id"
 
     def get_queryset(self):
-        sample_types = get_sample_types(["production", "geology"])
+        sample_types = get_sample_types(
+            is_production=True,
+            is_geology=True,
+        )
+
         return (
             SampleProductions.objects
             .select_related("iup")
-            .filter(is_deleted=False, type__in=sample_types)
+            .filter(
+                is_deleted=False,
+                type__in=sample_types,
+            )
             .order_by("tgl_sample")
-        )
+     )
     
     def _get_active_iup_id_for_user(self, user):
         active = getattr(user, "active_iup_id", None) or getattr(user, "iup_id", None)

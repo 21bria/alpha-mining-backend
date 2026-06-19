@@ -82,14 +82,29 @@ def get_detail_daily(filter_date, iup_filter=None):
         actual_detail AS (
             SELECT
                 LPAD(mp.t_load::text, 2, '0') AS left_time,
-                COALESCE(mp.categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(mp.is_ore, false) = true
+                    THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 mp.nama_material AS material_name,
                 SUM(mp.tonnage)::numeric AS tonnage
+
             FROM view_mining_productions mp
             WHERE {where_actual}
+            AND COALESCE(mp.is_production, true) = true
+
             GROUP BY
                 LPAD(mp.t_load::text, 2, '0'),
-                COALESCE(mp.categories_material, 'Other'),
+
+                CASE
+                    WHEN COALESCE(mp.is_ore, false) = true
+                    THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
+
                 mp.nama_material
         ),
 
@@ -103,19 +118,39 @@ def get_detail_daily(filter_date, iup_filter=None):
 
         plan_detail AS (
             SELECT
-                COALESCE(p.categories_material, 'Other') AS material_group,
-                p.material_name AS material_name,
-                ROUND((COALESCE(SUM(p.tonnage), 0) / 22)::numeric, 2) AS plan_tonnage
+                CASE
+                    WHEN COALESCE(p.is_ore, false) = true
+                    THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
+                p.material_name,
+
+                ROUND(
+                    (COALESCE(SUM(p.tonnage), 0) / 22)::numeric,
+                    2
+                ) AS plan_tonnage
+
             FROM view_mining_plan_productions p
             WHERE {where_plan}
+            AND COALESCE(p.is_production, true) = true
+
             GROUP BY
-                COALESCE(p.categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(p.is_ore, false) = true
+                    THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
+
                 p.material_name
         ),
 
         plan_per_hour AS (
             SELECT
-                ROUND((COALESCE(SUM(plan_tonnage), 0))::numeric, 2) AS plan_data
+                ROUND(
+                    COALESCE(SUM(plan_tonnage), 0)::numeric,
+                    2
+                ) AS plan_data
             FROM plan_detail
         )
 
@@ -137,11 +172,14 @@ def get_detail_daily(filter_date, iup_filter=None):
         FROM hour_series hs
         LEFT JOIN actual_detail ad
             ON hs.left_time = ad.left_time
+
         LEFT JOIN actual_total at
             ON hs.left_time = at.left_time
+
         CROSS JOIN plan_per_hour pph
-        LEFT JOIN plan_detail pd
-            ON 1 = 1
+
+        LEFT JOIN plan_detail pd ON 1 = 1
+
         ORDER BY
             hs.sort_order,
             ad.material_group,
@@ -149,7 +187,6 @@ def get_detail_daily(filter_date, iup_filter=None):
             pd.material_group,
             pd.material_name;
     """
-
     params = actual_params + plan_params
 
     with connection.cursor() as cursor:
@@ -324,14 +361,25 @@ def get_detail_monthly(filter_year, filter_month, iup_filter=None):
         actual_detail AS (
             SELECT
                 DATE(date_production) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 nama_material AS material_name,
                 SUM(tonnage)::numeric AS tonnage
+
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
+
             GROUP BY
                 DATE(date_production),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 nama_material
         ),
 
@@ -346,14 +394,25 @@ def get_detail_monthly(filter_year, filter_month, iup_filter=None):
         plan_detail AS (
             SELECT
                 DATE(date_plan) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 material_name,
                 SUM(tonnage)::numeric AS plan_tonnage
+
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
+
             GROUP BY
                 DATE(date_plan),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 material_name
         ),
 
@@ -568,14 +627,25 @@ def get_detail_weekly(filter_week, iup_filter=None):
         actual_detail AS (
             SELECT
                 DATE(date_production) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 nama_material AS material_name,
                 SUM(tonnage)::numeric AS tonnage
+
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
+
             GROUP BY
                 DATE(date_production),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 nama_material
         ),
 
@@ -590,14 +660,25 @@ def get_detail_weekly(filter_week, iup_filter=None):
         plan_detail AS (
             SELECT
                 DATE(date_plan) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 material_name,
                 SUM(tonnage)::numeric AS plan_tonnage
+
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
+
             GROUP BY
                 DATE(date_plan),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 material_name
         ),
 
@@ -633,6 +714,7 @@ def get_detail_weekly(filter_week, iup_filter=None):
             ON ds.left_date = pt.left_date
         LEFT JOIN plan_detail pd
             ON ds.left_date = pd.left_date
+
         ORDER BY
             ds.left_date,
             ad.material_group,
@@ -810,14 +892,23 @@ def get_detail_range(date_start, date_end, iup_filter=None):
         actual_detail AS (
             SELECT
                 DATE(date_production) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 nama_material AS material_name,
                 SUM(tonnage)::numeric AS tonnage
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 DATE(date_production),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 nama_material
         ),
 
@@ -832,14 +923,23 @@ def get_detail_range(date_start, date_end, iup_filter=None):
         plan_detail AS (
             SELECT
                 DATE(date_plan) AS left_date,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 material_name,
                 SUM(tonnage)::numeric AS plan_tonnage
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 DATE(date_plan),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 material_name
         ),
 
@@ -881,7 +981,6 @@ def get_detail_range(date_start, date_end, iup_filter=None):
             pd.material_group,
             pd.material_name;
     """
-
     params = [
         date_start,
         date_end,
@@ -1046,14 +1145,23 @@ def get_detail_yearly(yearly, iup_filter=None):
         actual_detail AS (
             SELECT
                 TO_CHAR(date_production, 'YYYY-MM') AS bulan,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 nama_material AS material_name,
                 SUM(tonnage)::numeric AS tonnage
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 TO_CHAR(date_production, 'YYYY-MM'),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 nama_material
         ),
 
@@ -1068,14 +1176,23 @@ def get_detail_yearly(yearly, iup_filter=None):
         plan_detail AS (
             SELECT
                 TO_CHAR(date_plan, 'YYYY-MM') AS bulan,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 material_name,
                 SUM(tonnage)::numeric AS plan_tonnage
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 TO_CHAR(date_plan, 'YYYY-MM'),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 material_name
         ),
 
@@ -1278,14 +1395,23 @@ def get_detail_all(iup_filter=None):
         WITH actual_detail AS (
             SELECT
                 TO_CHAR(date_production, 'YYYY') AS tahun,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 nama_material AS material_name,
                 SUM(tonnage)::numeric AS tonnage
             FROM view_mining_productions
             WHERE {where_actual}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 TO_CHAR(date_production, 'YYYY'),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 nama_material
         ),
 
@@ -1300,14 +1426,23 @@ def get_detail_all(iup_filter=None):
         plan_detail AS (
             SELECT
                 TO_CHAR(date_plan, 'YYYY') AS tahun,
-                COALESCE(categories_material, 'Other') AS material_group,
+
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END AS material_group,
+
                 material_name,
                 SUM(tonnage)::numeric AS plan_tonnage
             FROM view_mining_plan_productions
             WHERE {where_plan}
+            AND COALESCE(is_production, true) = true
             GROUP BY
                 TO_CHAR(date_plan, 'YYYY'),
-                COALESCE(categories_material, 'Other'),
+                CASE
+                    WHEN COALESCE(is_ore, false) = true THEN 'Ore'
+                    ELSE 'Non Ore'
+                END,
                 material_name
         ),
 

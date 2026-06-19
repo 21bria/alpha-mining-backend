@@ -2,10 +2,6 @@ from rest_framework import serializers
 from master.models import SampleType, SampleMethod
 
 
-# =========================
-# READ SERIALIZERS
-# =========================
-
 class SampleMethodSerializer(serializers.ModelSerializer):
     sample_type_id = serializers.IntegerField(source='sample_type.id', read_only=True)
     sample_type_name = serializers.CharField(source='sample_type.type_sample', read_only=True)
@@ -26,7 +22,6 @@ class SampleMethodSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-
 class SampleTypeListSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     total_methods = serializers.SerializerMethodField()
@@ -38,7 +33,13 @@ class SampleTypeListSerializer(serializers.ModelSerializer):
             'type_sample',
             'description',
             'status',
-            'category',
+
+            'is_production',
+            'is_geology',
+            'is_selling',
+            'is_monitoring',
+            'batch_pattern',
+
             'user',
             'user_name',
             'created_at',
@@ -61,7 +62,13 @@ class SampleTypeDetailSerializer(serializers.ModelSerializer):
             'type_sample',
             'description',
             'status',
-            'category',
+
+            'is_production',
+            'is_geology',
+            'is_selling',
+            'is_monitoring',
+            'batch_pattern',
+
             'user',
             'user_name',
             'created_at',
@@ -69,11 +76,7 @@ class SampleTypeDetailSerializer(serializers.ModelSerializer):
             'methods',
         ]
 
-
-# =========================
 # WRITE SERIALIZERS
-# =========================
-
 class SampleTypeWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = SampleType
@@ -82,7 +85,12 @@ class SampleTypeWriteSerializer(serializers.ModelSerializer):
             'type_sample',
             'description',
             'status',
-            'category',
+
+            'is_production',
+            'is_geology',
+            'is_selling',
+            'is_monitoring',
+            'batch_pattern',
         ]
 
     def validate_type_sample(self, value):
@@ -99,12 +107,7 @@ class SampleTypeWriteSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("Type sample sudah ada.")
 
-        return value
-
-    def validate_category(self, value):
-        if value is None:
-            return value
-        return value.strip()
+        return value.upper()
 
     def validate_description(self, value):
         if value is None:
@@ -122,7 +125,6 @@ class SampleTypeWriteSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             validated_data["user"] = request.user
         return super().update(instance, validated_data)
-
 
 class SampleMethodWriteSerializer(serializers.ModelSerializer):
     class Meta:
