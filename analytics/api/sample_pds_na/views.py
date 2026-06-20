@@ -2,7 +2,7 @@ from django.db import connection
 
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Count,Sum, Q
+from django.db.models import Count, Q
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import filters as drf_filters
@@ -18,22 +18,21 @@ from core.permissions import (
 from core.pagination import StandardResultsSetPagination
 from core.base import BaseViewSet
 
-from geology.models import SamplesPsiView
+from geology.models import SamplesPdsNaView
+from master.helpers import get_sample_types
 
-from .serializers import SamplesPsiSerializer
+from .serializers import SamplesPdsNaSerializer
 from .filters import SamplesFilter
 
 from analytics.models import ExportJob
 from analytics.tasks import run_export_job
-from master.helpers import get_sample_types
 
 
-
-class SamplesPsiViewSet(BaseViewSet):
-    queryset = SamplesPsiView.objects.none()
+class SamplesPdsNaViewSet(BaseViewSet):
+    queryset = SamplesPdsNaView.objects.none()
     ordering_fields = ["date_sample"]
     ordering = ["-date_sample"]
-    serializer_class = SamplesPsiSerializer
+    serializer_class = SamplesPdsNaSerializer
     permission_classes = [
         IsAuthenticated,
         RoleReadOnlyForViewer,
@@ -47,9 +46,9 @@ class SamplesPsiViewSet(BaseViewSet):
 
     search_fields = [
         "date_sample",
-        "sample_id",
-        "material_psi",
-        "batch_code",
+        "sample_number",
+        "material",
+        "batch",
         "iup_code",
         "iup_name",
     ]
@@ -57,8 +56,8 @@ class SamplesPsiViewSet(BaseViewSet):
     ordering_fields = [
         "id",
         "date_sample",
-        "sample_id",
-        "material_psi",
+        "sample_number",
+        "material",
     ]
 
 
@@ -85,13 +84,11 @@ class SamplesPsiViewSet(BaseViewSet):
             self.queryset.model.objects
             .filter(
                 type_sample__in=get_sample_types(
-                    is_production=True,
-                    is_geology=True,
+                    is_production=True
                 )
             )
             .order_by("date_sample")
         )
-
         user = self.request.user
         iup_id = self._get_iup_id_param()
 
@@ -114,25 +111,40 @@ class SamplesPsiViewSet(BaseViewSet):
 
         return qs
     
+    
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         qs = self.filter_queryset(self.get_queryset())
 
         data = qs.aggregate(
-            total_tonnage = Sum("allocated_tonnage"),
-            total_sample  = Count("sample_id"),
-            total_assay   = Count("ni", filter=Q(ni__isnull=False)),
+            total_sample=Count("sample_number"),
+            total_assay=Count("ni", filter=Q(ni__isnull=False)),
+
+            # jumlah dome unik
+            total_dome=Count(
+                "sampling_point",
+                filter=Q(sampling_point__isnull=False),
+                distinct=True,
+            ),
+
+            # jumlah material unik
+            total_material=Count(
+                "material",
+                filter=Q(material__isnull=False),
+                distinct=True,
+            ),
         )
 
-        total_tonnage   = data["total_tonnage"] or 0
-        total_sample    = data["total_sample"] or 0
-        total_assay     = data["total_assay"] or 0
+        total_sample = data["total_sample"] or 0
+        total_assay = data["total_assay"] or 0
 
         return Response({
-            "total_tonnage" : total_tonnage,
-            "total_sample"  : total_sample,
-            "total_assay"   : total_assay,
-            "difference"    : total_sample - total_assay,
+            "total_sample": total_sample,
+            "total_assay": total_assay,
+            "difference": total_sample - total_assay,
+
+            "total_dome": data["total_dome"] or 0,
+            "total_material": data["total_material"] or 0,
         })
     
     def handle_export(self, request):
@@ -142,7 +154,7 @@ class SamplesPsiViewSet(BaseViewSet):
             params[key] = values if len(values) > 1 else request.query_params.get(key)
 
         job = ExportJob.objects.create(
-            module="geology.sample_psi",
+            module="geology.sample_pds_na",
             params=params,
             created_by=request.user if request.user.is_authenticated else None,
             status="pending",

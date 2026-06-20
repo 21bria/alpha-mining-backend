@@ -12,6 +12,7 @@ from analytics.api.sample_duplicated.views_mral import sampleDupMralviewSet
 
 from analytics.api.sample_dome.views import SamplesDomeViewSet
 from analytics.api.sample_psi.views import SamplesPsiViewSet
+from analytics.api.sample_pds_na.views import SamplesPdsNaViewSet
 
 from analytics.api.report_management.views import (
     ManagementReportViewSet,
@@ -29,6 +30,7 @@ router.register(r"sample-duplicated-mral", sampleDupMralviewSet, basename="sampl
 
 router.register(r"sample-dome", SamplesDomeViewSet, basename="sample-dome")
 router.register(r"sample-psi", SamplesPsiViewSet, basename="sample-psi")
+router.register(r"sample-pds-na", SamplesPdsNaViewSet, basename="sample-pds-na")
 
 router.register(
     r"management-report",
