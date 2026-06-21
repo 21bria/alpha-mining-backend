@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.gis.db import models as geomodels
 from core.models import BaseTenantModel
-from master.models import MineIUP
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -135,6 +134,59 @@ class SourceMinesDome(BaseTenantModel):
             models.Index(fields=["iup"]),
             models.Index(fields=["pile_id"]),
             models.Index(fields=["code"]),
+        ]
+
+class SourcePitDome(models.Model):
+    DOME_TYPES = (
+        ("TEMP", "Temporary"),
+        ("SELECTIVE", "Selective"),
+        ("ROM", "ROM"),
+        ("STOCK", "Stock"),
+    )
+
+    dome_type = models.CharField(
+        max_length=20,
+        choices=DOME_TYPES,
+        default="TEMP",
+    )
+
+    dome        = models.CharField(max_length=50)
+    description = models.CharField(max_length=255, null=True, blank=True)
+    compositing = models.CharField(max_length=15, null=True, blank=True)
+    status_dome = models.CharField(max_length=15, null=True, blank=True)
+    is_active   = models.BooleanField(default=True)
+    direct_sale = models.CharField(max_length=10, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    loading_point = models.ForeignKey(
+        SourceMinesLoading,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="domes",
+        db_column="id_loading",
+    )
+
+    latitude    = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    longitude   = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    geometry    = geomodels.MultiPolygonField(srid=4326, null=True, blank=True)
+    extra_properties = models.JSONField(null=True, blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)  
+
+    class Meta:
+        db_table = "master_mine_sources_pit_dome"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["loading_point", "dome"],
+                name="uq_loading_dome",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["dome"]),
+            models.Index(fields=["loading_point", "dome"]),
+            models.Index(fields=["dome_type"]),
+            models.Index(fields=["is_active"]),
         ]
 
 class detailsDome(models.Model):

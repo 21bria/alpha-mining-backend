@@ -5,6 +5,7 @@ from master.api.iup.views import MineIUPViewSet
 from master.api.lookups.units_categories import UnitsCategoriesListView
 from master.api.source.views import SourceMinesViewSet
 from master.api.loading.views import SourceMinesLoadingViewSet
+from master.api.dome_pit.views import SourcePitDomeViewSet
 from master.api.dumping.views import SourceMinesDumpingViewSet
 from master.api.dome.views import SourceMinesDomeViewSet
 from master.api.block.views import BlockViewSet
@@ -34,6 +35,8 @@ router.register(r"iup", MineIUPViewSet, basename="iup")
 router.register(r"mine-sources", SourceMinesViewSet, basename="mine-sources")
 router.register(r"mine-block", BlockViewSet, basename="mine-block")
 router.register(r"loading-points", SourceMinesLoadingViewSet, basename="loading-points")
+router.register(r"pit-dome", SourcePitDomeViewSet, basename="pit-dome")
+
 router.register(r"dumping-points", SourceMinesDumpingViewSet, basename="dumping-points")
 router.register(r"dome-points", SourceMinesDomeViewSet, basename="dome-points")
 router.register(r"vendors", VendorsViewSet, basename="vendors")

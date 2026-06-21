@@ -3,7 +3,7 @@ import random
 from rest_framework import serializers
 from django.db.models import Sum
 from geology.models import OreProductions,OreProductionsView,ProductionsConfig
-from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block
+from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block,SourcePitDome
 from master.services.sample_type import (
     get_production_geology_sample_type_map,
     build_pattern,
@@ -62,6 +62,7 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
     iup_name = serializers.CharField(source="iup.iup_name", read_only=True)
 
     prospect_label = serializers.SerializerMethodField()
+    pit_dome_label = serializers.SerializerMethodField()
     block_label = serializers.SerializerMethodField()
     material_label = serializers.SerializerMethodField()
     stockpile_label = serializers.SerializerMethodField()
@@ -77,6 +78,7 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
 
             "id_block", "block_label",
             "id_prospect_area", "prospect_label",
+            "id_pit_dome", "pit_dome_label",
 
             "from_rl",
             "to_rl",
@@ -128,6 +130,13 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             return None
         row = SourceMinesLoading.objects.filter(id=obj.id_prospect_area).only("loading_point").first()
         return row.loading_point if row else None
+    
+    def get_pit_dome_label(self, obj):
+        if not obj.id_pit_dome:
+            return None
+
+        row = SourcePitDome.objects.filter(id=obj.id_pit_dome).only("dome").first()
+        return row.dome if row else None
 
     def get_block_label(self, obj):
         if not obj.id_block:
@@ -253,6 +262,40 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "iup": "IUP is required."
             })
+        
+        prospect_id = attrs.get(
+            "id_prospect_area",
+            getattr(self.instance, "id_prospect_area", None)
+        )
+
+        pit_dome_id = attrs.get(
+            "id_pit_dome",
+            getattr(self.instance, "id_pit_dome", None)
+        )
+
+        if prospect_id:
+            if not pit_dome_id:
+                default_dome = SourcePitDome.objects.filter(
+                    loading_point_id=prospect_id,
+                    dome__iexact="ALL",
+                    is_active=True,
+                ).first()
+
+                if default_dome:
+                    attrs["id_pit_dome"] = default_dome.id
+
+            else:
+                pit_dome = SourcePitDome.objects.filter(id=pit_dome_id).first()
+
+                if not pit_dome:
+                    raise serializers.ValidationError({
+                        "id_pit_dome": "Pit dome tidak ditemukan."
+                    })
+
+                if pit_dome.loading_point_id != prospect_id:
+                    raise serializers.ValidationError({
+                        "id_pit_dome": "Pit dome tidak sesuai dengan loading point/prospect area."
+                    })
 
         # auto isi id_stockpile dari pile
         stockpile_id = self.resolve_stockpile_from_pile(attrs)

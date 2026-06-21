@@ -9,6 +9,7 @@ from .mine_categories import MineCategoryLookupViewSet
 from .mine_source import SourceMinesLookupViewSet
 from .mine_block import BlockLookupViewSet
 from .mine_loading import SourceMinesLoadingLookupViewSet
+from .mine_dome_pit import SourcePitDomeLookupViewSet 
 from .mine_dumping import SourceMinesDumpingLookupViewSet
 from .mine_dome import SourceMinesDomeLookupViewSet
 from .ore_class import OreClassLookupViewSet
@@ -36,6 +37,7 @@ router.register(r"mine-iup", MineIUPLookupViewSet, basename="mine-iup-lookup")
 router.register(r"mine-source", SourceMinesLookupViewSet, basename="mine-source-lookup")
 router.register(r"mine-block", BlockLookupViewSet, basename="mine-block-lookup")
 router.register(r"mine-loading", SourceMinesLoadingLookupViewSet, basename="mine-loading-lookup")
+router.register(r"mine-pit-dome", SourcePitDomeLookupViewSet, basename="mine-pit-dome-lookup")
 router.register(r"mine-dumping", SourceMinesDumpingLookupViewSet, basename="mine-dumping-lookup")
 router.register(r"mine-dome", SourceMinesDomeLookupViewSet, basename="mine-dome-lookup")
 router.register(r"ore-class", OreClassLookupViewSet, basename="ore-class-lookup")

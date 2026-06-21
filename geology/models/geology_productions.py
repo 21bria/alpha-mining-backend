@@ -10,6 +10,7 @@ class OreProductions(BaseTenantModel):
     tgl_production      = models.DateField(default=None, null=True, blank=True)
     shift               = models.CharField(max_length=10, default=None, null=True, blank=True)
     id_prospect_area    = models.IntegerField(default=None, null=True, blank=True)
+    id_pit_dome         = models.IntegerField(default=None, null=True, blank=True)
     id_block            = models.BigIntegerField(default=None, null=True, blank=True)
     from_rl             = models.CharField(max_length=15, default=None, null=True, blank=True)
     to_rl               = models.CharField(max_length=15, default=None, null=True, blank=True)
