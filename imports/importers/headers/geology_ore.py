@@ -6,6 +6,7 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "date_production",
         "shift",
         "prospect_area",
+        "pit_dome",
         "material",
         "unit_truck",
         "stockpile",
@@ -21,6 +22,7 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "shift",
         "category",
         "prospect_area",
+        "pit_dome",
         "mine_block",
         "from",
         "to",
@@ -38,7 +40,8 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "tonnage",
         "pile_status",
         "remarks",
-        "truck_factors"
+        "truck_factors",
+        "direct"
     ],
     aliases={
         "iup": "iup_code",
@@ -46,6 +49,8 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "date": "date_production",
         "loading_point": "prospect_area",
         "source": "prospect_area",
+        "dome_pit": "pit_dome",
+        "dome_selective": "pit_dome",
         "dumping": "stockpile",
         "dome": "pile_id"
     },

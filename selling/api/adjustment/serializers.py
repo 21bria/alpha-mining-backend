@@ -1,7 +1,16 @@
 from django.db import transaction
 from rest_framework import serializers
-
+from decimal import Decimal
+from django.db.models import Sum
+from mining.models import mineProductions
+from geology.models import OreProductions
 from selling.models import SellingBargingAdjustment,SellingBarging
+
+# Barging      : tetap update semua data code_lot
+# Geology      : update hanya direct = Yes, kalau ada data direct
+# Mining       : update hanya direct = Yes, kalau ada data direct
+# Validasi     : jumlah direct Yes geology/mining harus sama dengan jumlah direct Yes barging
+# Pembagian    : tonnage_adjust / ritase_direct_barging
 
 class SellingBargingAdjustmentSerializer(serializers.ModelSerializer):
     code_lot_code = serializers.CharField(source="code_lot.code", read_only=True)
@@ -44,6 +53,141 @@ class SellingBargingAdjustmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def _apply_adjustment_to_related_tables(
+        self,
+        *,
+        code_lot_obj,
+        ritase_ori,
+        tonnage_adjust,
+        date_arrival,
+        date_departure,
+    ):
+        # =========================
+        # BARGING
+        # =========================
+        barging_qs = SellingBarging.objects.filter(
+            code_lot__iexact=code_lot_obj.code
+        )
+
+        if not barging_qs.exists():
+            raise serializers.ValidationError({
+                "code_lot": f"Data barging untuk {code_lot_obj.code} tidak ditemukan."
+            })
+
+        total_barging_count = barging_qs.count()
+
+        if total_barging_count <= 0:
+            raise serializers.ValidationError({
+                "ritase_ori": "Ritase barging tidak valid."
+            })
+
+        barging_direct_qs = barging_qs.filter(
+            direct__iexact="Yes"
+        )
+
+        barging_direct_count = barging_direct_qs.count()
+
+        # pembagian harus dari total ritase barging,
+        # supaya total barging balance dengan tonnage_adjust
+        tonnage_per_ritase = (
+            Decimal(str(tonnage_adjust)) / Decimal(str(total_barging_count))
+        )
+
+        # update semua barging dalam code lot
+        barging_qs.update(
+            tonnage=tonnage_per_ritase,
+            date_barge_in=date_arrival,
+            date_barge_out=date_departure,
+            status_barging="Complete",
+        )
+
+        # kalau tidak ada direct Yes di barging,
+        # geology dan mining tidak ikut update
+        if barging_direct_count <= 0:
+            return
+
+        # =========================
+        # AMBIL ID PILE DARI BARGING
+        # =========================
+        barging_ref = (
+            barging_qs
+            .exclude(id_pile__isnull=True)
+            .first()
+        )
+
+        if not barging_ref:
+            return
+
+        id_pile = barging_ref.id_pile
+        dome_id = id_pile
+
+        # =========================
+        # GEOLOGY
+        # =========================
+        geology_qs = OreProductions.objects.filter(
+            id_pile=id_pile,
+            direct__iexact="Yes",
+        )
+
+        # geology_count = geology_qs.count()
+
+        # if geology_count > 0:
+        #     if geology_count != barging_direct_count:
+        #         raise serializers.ValidationError({
+        #             "ritase_ori": (
+        #                 f"Direct geology ({geology_count}) "
+        #                 f"tidak sama dengan direct barging ({barging_direct_count})"
+        #             )
+        #         })
+
+        #     geology_qs.update(
+        #         tonnage=tonnage_per_ritase
+        #     )
+
+        geology_total = geology_qs.aggregate(
+            total_ritase=Sum("ritase"),
+        )
+
+        geology_ritase = int(geology_total["total_ritase"] or 0)
+
+        if geology_ritase > 0:
+            if geology_ritase != barging_direct_count:
+                raise serializers.ValidationError({
+                    "ritase_ori": (
+                        f"Ritase direct geology ({geology_ritase}) "
+                        f"tidak sama dengan direct barging ({barging_direct_count})"
+                    )
+                })
+
+            for geo in geology_qs:
+                geo_ritase = Decimal(str(geo.ritase or 0))
+                geo.tonnage = tonnage_per_ritase * geo_ritase
+                geo.save(update_fields=["tonnage"])
+                
+
+        # =========================
+        # MINING
+        # =========================
+        mining_qs = mineProductions.objects.filter(
+            dome_id=dome_id,
+            direct__iexact="Yes",
+        )
+
+        mining_count = mining_qs.count()
+
+        if mining_count > 0:
+            if mining_count != barging_direct_count:
+                raise serializers.ValidationError({
+                    "ritase_ori": (
+                        f"Direct mining ({mining_count}) "
+                        f"tidak sama dengan direct barging ({barging_direct_count})"
+                    )
+                })
+
+            mining_qs.update(
+                tonnage=tonnage_per_ritase
+            )
 
     def validate(self, attrs):
         instance = getattr(self, "instance", None)
@@ -105,9 +249,9 @@ class SellingBargingAdjustmentSerializer(serializers.ModelSerializer):
 
         validated_data["status"] = "Complete"
 
-        tonnage_per_ritase = (tonnage_adjust / ritase_ori) if ritase_ori > 0 else 0
-
-        existing = SellingBargingAdjustment.objects.filter(code_lot=code_lot_obj).first()
+        existing = SellingBargingAdjustment.objects.filter(
+            code_lot=code_lot_obj
+        ).first()
 
         if existing:
             existing.date_arrival = validated_data.get("date_arrival")
@@ -121,21 +265,24 @@ class SellingBargingAdjustmentSerializer(serializers.ModelSerializer):
             existing.user = validated_data.get("user")
             existing.save()
 
-            SellingBarging.objects.filter(code_lot=code_lot_obj.code).update(
-                tonnage=tonnage_per_ritase,
-                date_barge_in=date_arrival,
-                date_barge_out=date_departure,
-                status_barging="Complete",
+            self._apply_adjustment_to_related_tables(
+                code_lot_obj=code_lot_obj,
+                ritase_ori=ritase_ori,
+                tonnage_adjust=tonnage_adjust,
+                date_arrival=date_arrival,
+                date_departure=date_departure,
             )
+
             return existing
 
         obj = super().create(validated_data)
 
-        SellingBarging.objects.filter(code_lot=code_lot_obj.code).update(
-            tonnage=tonnage_per_ritase,
-            date_barge_in=date_arrival,
-            date_barge_out=date_departure,
-            status_barging="Complete",
+        self._apply_adjustment_to_related_tables(
+            code_lot_obj=code_lot_obj,
+            ritase_ori=ritase_ori,
+            tonnage_adjust=tonnage_adjust,
+            date_arrival=date_arrival,
+            date_departure=date_departure,
         )
 
         return obj
@@ -152,13 +299,12 @@ class SellingBargingAdjustmentSerializer(serializers.ModelSerializer):
 
         obj = super().update(instance, validated_data)
 
-        tonnage_per_ritase = (tonnage_adjust / ritase_ori) if ritase_ori and ritase_ori > 0 else 0
-
-        SellingBarging.objects.filter(code_lot=code_lot_obj.code).update(
-            tonnage=tonnage_per_ritase,
-            date_barge_in=date_arrival,
-            date_barge_out=date_departure,
-            status_barging="Complete",
+        self._apply_adjustment_to_related_tables(
+            code_lot_obj=code_lot_obj,
+            ritase_ori=ritase_ori,
+            tonnage_adjust=tonnage_adjust,
+            date_arrival=date_arrival,
+            date_departure=date_departure,
         )
 
         return obj

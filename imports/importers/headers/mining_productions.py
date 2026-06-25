@@ -45,9 +45,10 @@ PRODUCTIONS_MINING_HEADERS = make_header_config(
         "iup_code": "iup_code",
         "date": "date_production",
         "time": "time_hauling",
-        "loading": "loading_point",
+        "loading_point": "loading",
         "dumping": "dumping_point",
+        "pile_id": "pile",
         "pile_id": "dome",
-        "dome_id": "dome"
+        "pile_id": "dome_point"
     },
 )

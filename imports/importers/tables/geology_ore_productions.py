@@ -18,6 +18,7 @@ from master.models import (
     SourceMinesDumping,
     SourceMinesDome,
     OreTruckFactor,
+    SourcePitDome
 )
 from geology.models import OreProductions,ProductionsConfig
 
@@ -64,6 +65,7 @@ class OreProductionImporter:
 
         iup_codes_needed: set[str] = set()
         source_names_needed: set[str] = set()
+        pit_dome_names_needed: set[str] = set()
         block_names_needed: set[str] = set()
         material_names_needed: set[str] = set()
         stockpile_names_needed: set[str] = set()
@@ -83,7 +85,6 @@ class OreProductionImporter:
         pds_pattern = pds_cfg.get("batch_pattern")
 
         # 1. VALIDATE + COLLECT
-
         for row_no, row in enumerate(rows, start=1):
             try:
                 iup_code = upper_or_none(row.get("iup_code"))
@@ -91,6 +92,7 @@ class OreProductionImporter:
                 shift = upper_or_none(row.get("shift"))
                 category = norm_or_none(row.get("category"))
                 source = norm_or_none(row.get("prospect_area"))
+                pit_dome = upper_or_none(row.get("pit_dome"))
                 block = norm_or_none(row.get("mine_block"))
                 rl_from = norm_or_none(row.get("from"))
                 rl_to = norm_or_none(row.get("to"))
@@ -109,13 +111,20 @@ class OreProductionImporter:
                 remarks = norm_or_none(row.get("remarks"))
                 ore_class = norm_or_none(row.get("ore_class"))
                 truck_factors = norm_or_none(row.get("truck_factors"))
+                direct = norm_or_none(row.get("direct"))
+                
+                # validasi direct
+                if direct not in ("Yes", "No"):
+                    raise ValueError(
+                        f"direct '{direct}' must be 'Yes' or 'No'"
+                    )
 
                 required_fields = {
                     "iup_code": iup_code,
                     "date_production": date_pds,
                     "shift": shift,
                     "prospect_area": source,
-                    # "mine_block": block,
+                    "pit_dome": pit_dome,
                     "material": material_name,
                     "unit_truck": truck,
                     "stockpile": stockpile,
@@ -145,6 +154,7 @@ class OreProductionImporter:
                     "shift": shift,
                     "category": category,
                     "source": source,
+                    "pit_dome": pit_dome,
                     "block": block,
                     "rl_from": rl_from,
                     "rl_to": rl_to,
@@ -162,12 +172,15 @@ class OreProductionImporter:
                     "status_pile": status_pile,
                     "remarks": remarks,
                     "ore_class": ore_class,
+                    "direct": direct,
                 })
 
                 if iup_code:
                     iup_codes_needed.add(iup_code.casefold())
                 if source:
                     source_names_needed.add(source.casefold())
+                if pit_dome:
+                    pit_dome_names_needed.add(pit_dome.casefold())   
                 if block:
                     block_names_needed.add(block.casefold())
                 if material_name:
@@ -205,6 +218,19 @@ class OreProductionImporter:
                 .annotate(name_l=Lower("loading_point"))
                 .filter(name_l__in=source_names_needed)
                 .values_list("name_l", "id")
+            )
+        }
+
+        pit_dome_map = {
+            (loading_id, dome_l): obj_id
+            for loading_id, dome_l, obj_id in (
+                SourcePitDome.objects
+                .annotate(dome_l=Lower("dome"))
+                .filter(
+                    loading_point_id__in=source_map.values(),
+                    dome_l__in=pit_dome_names_needed,
+                )
+                .values_list("loading_point_id", "dome_l", "id")
             )
         }
 
@@ -267,8 +293,6 @@ class OreProductionImporter:
         }
 
         # 3. RESOLVE ORE TRUCK FACTOR
-        # key = (iup_id, type_tf_l, material_id)
-
         truck_factor_map = {
             (iup_id, (type_tf or "").casefold(), material_id): ton
             for iup_id, type_tf, material_id, ton in (
@@ -295,6 +319,18 @@ class OreProductionImporter:
 
                 iup_id = iup_map.get(item["iup_code"].casefold())
                 id_source = source_map.get(item["source"].casefold()) if item["source"] else None
+
+                id_pit_dome = (
+                    pit_dome_map.get(
+                        (
+                            id_source,
+                            item["pit_dome"].casefold()
+                        )
+                    )
+                    if item["pit_dome"] and id_source
+                    else None
+                )
+
                 id_block = block_map.get(item["block"].casefold()) if item["block"] else None
                 id_material = material_map.get(item["material_name"].casefold()) if item["material_name"] else None
                 id_stockpile = (
@@ -313,6 +349,10 @@ class OreProductionImporter:
                     errors.append(f"iup_code '{item['iup_code']}' not found")
                 if item["source"] and id_source is None:
                     errors.append(f"prospect_area '{item['source']}' not found")
+                if item["pit_dome"] and id_pit_dome is None:
+                    errors.append(
+                        f"pit_dome '{item['pit_dome']}' not found for prospect_area '{item['source']}'"
+                    )    
                 if item["block"] and id_block is None:
                     errors.append(f"mine_block '{item['block']}' not found")
                 if item["material_name"] and id_material is None:
@@ -429,6 +469,7 @@ class OreProductionImporter:
                     shift=item["shift"],
                     category=item["category"],
                     id_prospect_area=id_source,
+                    id_pit_dome=id_pit_dome,
                     id_block=id_block,
                     from_rl=item["rl_from"],
                     to_rl=item["rl_to"],
@@ -453,6 +494,7 @@ class OreProductionImporter:
                     ore_class=item["ore_class"],
                     status_dome="Continue",
                     sale_adjust=sale_adjust,
+                    direct=item["direct"],
                     user=user if hasattr(OreProductions, "user") else None,
                 )
 
