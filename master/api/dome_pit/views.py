@@ -40,8 +40,7 @@ class SourcePitDomeViewSet(MasterBaseViewSet):
     permission_classes = [
         IsAuthenticated,
         RoleReadOnlyForViewer,
-        GlobalMasterPermission,
-        IUPObjectPermission,
+        GlobalMasterPermission
     ]
 
     pagination_class = StandardResultsSetPagination
@@ -187,31 +186,42 @@ class SourcePitDomeViewSet(MasterBaseViewSet):
             filename="SourcePitDome_import_template.xlsx",
         )
 
+
     def perform_create(self, serializer):
-        try:
-            # IUP tidak disimpan langsung.
-            # IUP otomatis ikut dari loading_point.
-            serializer.save(user=self.request.user)
+        user = self.request.user
+        loading_point = serializer.validated_data.get("loading_point")
 
-        except IntegrityError as e:
-            msg = str(e)
+        if not (
+            getattr(user, "is_system", False)
+            or getattr(user, "is_superuser", False)
+            or getattr(user, "is_management", False)
+        ):
+            allowed = user_allowed_iup_ids(user)
 
-            if "uq_loading_dome" in msg or "uq_dome_id_pit" in msg:
+            if not loading_point or loading_point.iup_id not in allowed:
                 raise ValidationError({
-                    "dome": "Dome sudah ada untuk loading point ini."
+                    "loading_point": "Anda tidak punya akses ke IUP loading point ini."
                 })
 
-            raise
+        serializer.save(user=user)
 
     def perform_update(self, serializer):
-        try:
-            serializer.save(user=self.request.user)
-        except IntegrityError as e:
-            msg = str(e)
+        user = self.request.user
+        loading_point = serializer.validated_data.get(
+            "loading_point",
+            serializer.instance.loading_point,
+        )
 
-            if "uq_loading_dome" in msg or "uq_dome_id_pit" in msg:
+        if not (
+            getattr(user, "is_system", False)
+            or getattr(user, "is_superuser", False)
+            or getattr(user, "is_management", False)
+        ):
+            allowed = user_allowed_iup_ids(user)
+
+            if not loading_point or loading_point.iup_id not in allowed:
                 raise ValidationError({
-                    "dome": "Dome sudah ada untuk loading point ini."
+                    "loading_point": "Anda tidak punya akses ke IUP loading point ini."
                 })
 
-            raise
+        serializer.save(user=user)
