@@ -91,6 +91,7 @@ def build_pattern(pattern: str | None, **kwargs) -> str | None:
         material=kwargs.get("material", ""),
         truck=kwargs.get("truck", ""),
         point=kwargs.get("point", ""),
+        pit_dome=kwargs.get("pit_dome", ""),
         batch=kwargs.get("batch", ""),
         increments=kwargs.get("increments", ""),
         lot=kwargs.get("lot", ""),

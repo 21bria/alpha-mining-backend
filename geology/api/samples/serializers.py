@@ -224,6 +224,7 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
         unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
         sampling_point = attrs.get("sampling_point", getattr(self.instance, "sampling_point", None))
         batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
+        pit_dome = attrs.get("sample_number", getattr(self.instance, "sample_number", None))
 
         return build_pattern(
             pattern,
@@ -231,6 +232,7 @@ class SamplesCRUDSerializer(serializers.ModelSerializer):
             material=str(id_material or ""),
             truck=unit_truck or "",
             point=str(sampling_point or ""),
+            pit_dome=pit_dome or "",
             batch=batch_code or "",
         )
 

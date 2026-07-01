@@ -18,7 +18,8 @@ from master.models import (
     SourceMinesDumping,
     SourceMinesDome,
     OreTruckFactor,
-    SourcePitDome
+    SourcePitDome,
+    SampleType,
 )
 from geology.models import OreProductions,ProductionsConfig
 
@@ -71,18 +72,19 @@ class OreProductionImporter:
         stockpile_names_needed: set[str] = set()
         dome_names_needed: set[str] = set()
         truck_types_needed: set[str] = set()
+        sample_type_names_needed: set[str] = set()
 
         today = date.today()
         # SAMPLE TYPE CONFIG
         sample_type_map = get_production_geology_sample_type_map()
-        pds_cfg = sample_type_map.get("PDS")
+        # pds_cfg = sample_type_map.get("PDS")
 
-        if not pds_cfg:
-            raise ValueError(
-                "PDS sample type not configured in SampleType master"
-            )
+        # if not pds_cfg:
+        #     raise ValueError(
+        #         "PDS sample type not configured in SampleType master"
+        #     )
 
-        pds_pattern = pds_cfg.get("batch_pattern")
+        # pds_pattern = pds_cfg.get("batch_pattern")
 
         # 1. VALIDATE + COLLECT
         for row_no, row in enumerate(rows, start=1):
@@ -112,7 +114,7 @@ class OreProductionImporter:
                 ore_class = norm_or_none(row.get("ore_class"))
                 truck_factors = norm_or_none(row.get("truck_factors"))
                 direct = norm_or_none(row.get("direct"))
-                
+                sample_type = upper_or_none(row.get("sample_type"))
                 # validasi direct
                 if direct not in ("Yes", "No"):
                     raise ValueError(
@@ -131,6 +133,7 @@ class OreProductionImporter:
                     "pile_id": dome,
                     "batch_code": batch,
                     "truck_factors": truck_factors,
+                    "sample_type": sample_type,
                 }
 
                 missing_fields = [field for field, value in required_fields.items() if not value]
@@ -191,6 +194,8 @@ class OreProductionImporter:
                     dome_names_needed.add(dome.casefold())
                 if truck:
                     truck_types_needed.add(truck.casefold())
+                if sample_type:
+                    sample_type_names_needed.add(sample_type.casefold())   
 
             except Exception as e:
                 res.add_error(row_no, row, str(e))
@@ -305,6 +310,16 @@ class OreProductionImporter:
             )
         }
 
+        sample_type_map_db = {
+            name_l: obj_id
+            for name_l, obj_id in (
+                SampleType.objects
+                .annotate(name_l=Lower("type_sample"))
+                .filter(name_l__in=sample_type_names_needed)
+                .values_list("name_l", "id")
+            )
+        }
+
         # 4. BUILD OBJECTS
 
         to_create: list[OreProductions] = []
@@ -364,15 +379,27 @@ class OreProductionImporter:
                         f"pile_id '{item['dome']}' not found for stockpile '{item['stockpile']}'"
                     )
 
+                sample_type_name = item["sample_type"]
+                sample_type_id = sample_type_map_db.get(sample_type_name.casefold()) if sample_type_name else None
+
+                if not sample_type_id:
+                    errors.append(f"sample_type '{sample_type_name}' not found")
+
+                cfg = sample_type_map.get(sample_type_name)
+
+                if not cfg:
+                    errors.append(f"sample_type '{sample_type_name}' has no batch pattern config")   
+
                 if errors:
                     raise ValueError("; ".join(errors))
 
                 kode_batch = build_pattern(
-                    pds_pattern,
-                    type="PDS",
+                    cfg.get("batch_pattern"),
+                    type=sample_type_name,
                     material=str(id_material or ""),
                     truck=item["truck"] or "",
                     point=str(id_pile or ""),
+                    pit_dome=item["pit_dome"] or "",
                     batch=item["batch"] or "",
                 )
 
@@ -405,16 +432,6 @@ class OreProductionImporter:
                         tonnage_final = float(factor_ton) * float(ritase_val)
                 else:
                     tonnage_final = float(ton_input)
-
-                # left_date = item["date_pds"].day if item["date_pds"] else None
-
-                # material_upper = (item["material_name"] or "").upper()
-                # if material_upper == "LIM":
-                #     sale_adjust = "HPAL"
-                # elif material_upper == "SAP":
-                #     sale_adjust = "RKEF"
-                # else:
-                #     sale_adjust = None
 
                 sale_adjust = (
                     material_sale_adjust_map.get(item["material_name"].casefold())
@@ -495,6 +512,7 @@ class OreProductionImporter:
                     status_dome="Continue",
                     sale_adjust=sale_adjust,
                     direct=item["direct"],
+                    sample_type=sample_type_id,
                     user=user if hasattr(OreProductions, "user") else None,
                 )
 
@@ -504,7 +522,6 @@ class OreProductionImporter:
                 res.add_error(row_no, raw, str(e))
 
         # 5. BULK CREATE
-     
         if to_create:
             with transaction.atomic():
                 OreProductions.objects.bulk_create(to_create, batch_size=500)

@@ -29,6 +29,7 @@ class OreProductionsView(models.Model):
     sample_number  = models.CharField(max_length=25, default=None, null=True, blank=True)
     no_production  = models.CharField(max_length=25, default=None, null=True, blank=True)
     direct         = models.CharField(max_length=25,default=None, null=True, blank=True)
+    sample_type    = models.CharField(max_length=50,default=None, null=True, blank=True)
     created_at     = models.DateTimeField(default=None, null=True, blank=True)
     iup_id         = models.IntegerField(default=None, null=True, blank=True)
     iup_code       = models.CharField(max_length=50, default=None, null=True, blank=True)

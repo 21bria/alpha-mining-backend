@@ -3,7 +3,7 @@ import random
 from rest_framework import serializers
 from django.db.models import Sum
 from geology.models import OreProductions,OreProductionsView,ProductionsConfig
-from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block,SourcePitDome
+from master.models import SourceMinesLoading,SourceMinesDumping,SourceMinesDome,Material,Block,SourcePitDome,SampleType
 from master.services.sample_type import (
     get_production_geology_sample_type_map,
     build_pattern,
@@ -43,6 +43,7 @@ class ProductionsSerializer(serializers.ModelSerializer):
             "remarks",
             "sample_number",
             "no_production",
+            "sample_type",
             "direct",
             "created_at",
             "user_id",
@@ -61,12 +62,14 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
     iup_code = serializers.CharField(source="iup.iup_code", read_only=True)
     iup_name = serializers.CharField(source="iup.iup_name", read_only=True)
 
+
     prospect_label = serializers.SerializerMethodField()
     pit_dome_label = serializers.SerializerMethodField()
     block_label = serializers.SerializerMethodField()
     material_label = serializers.SerializerMethodField()
     stockpile_label = serializers.SerializerMethodField()
     pile_label = serializers.SerializerMethodField()
+    sample_type_label = serializers.SerializerMethodField()
 
     class Meta:
         model = OreProductions
@@ -108,6 +111,7 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             "category",
             "direct",
             "no_production",
+            "sample_type", "sample_type_label",
             "user",
         ]
         read_only_fields = [
@@ -161,6 +165,31 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
             return None
         row = SourceMinesDome.objects.filter(id=obj.id_pile).only("pile_id").first()
         return row.pile_id if row else None
+    
+    def get_sample_type_label(self, obj):
+        if not obj.sample_type:
+            return None
+
+        row = SampleType.objects.filter(id=obj.sample_type).only("type_sample").first()
+        return row.type_sample if row else None
+    
+    def get_pit_dome_name(self, attrs):
+        pit_dome_id = attrs.get("id_pit_dome", getattr(self.instance, "id_pit_dome", None))
+
+        if not pit_dome_id:
+            return None
+
+        row = SourcePitDome.objects.filter(id=pit_dome_id).only("dome").first()
+        return row.dome if row else None
+    
+    def get_sample_type_name(self, attrs):
+        sample_type = attrs.get("sample_type",getattr(self.instance, "sample_type", None))
+
+        if not sample_type:
+            return None
+        
+        row = SampleType.objects.filter(id=sample_type).only("type_sample").first()
+        return row.type_sample if row else None
 
     def get_material_name(self, attrs):
         material_id = attrs.get("id_material", getattr(self.instance, "id_material", None))
@@ -221,22 +250,46 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
         unit_truck = attrs.get("unit_truck", getattr(self.instance, "unit_truck", None))
         pile_id = attrs.get("id_pile", getattr(self.instance, "id_pile", None))
         batch_code = attrs.get("batch_code", getattr(self.instance, "batch_code", None))
+        sample_type_id = attrs.get("sample_type", getattr(self.instance, "sample_type", None))
 
-        if not material_id or not unit_truck or not pile_id or not batch_code:
+        if not material_id or not sample_type_id:
             return None
+
+        sample = (
+            SampleType.objects
+            .filter(id=sample_type_id)
+            .only("type_sample")
+            .first()
+        )
+
+        if not sample:
+            return None
+
+        sample_type_name = sample.type_sample.upper()
 
         sample_type_map = get_production_geology_sample_type_map()
-        pds_cfg = sample_type_map.get("PDS")
+        cfg = sample_type_map.get(sample_type_name)
 
-        if not pds_cfg:
+        if not cfg:
             return None
 
+        pit_dome = self.get_pit_dome_name(attrs)
+
+        if sample_type_name == "PDS_QA":
+            if not unit_truck or not pile_id or not batch_code:
+                return None
+
+        elif sample_type_name == "PDS_GC":
+            if not pit_dome:
+                return None
+
         return build_pattern(
-            pds_cfg.get("batch_pattern"),
-            type="PDS",
-            material=str(material_id or ""),
+            cfg.get("batch_pattern"),
+            type=sample_type_name,
+            material=str(material_id),
             truck=unit_truck or "",
             point=str(pile_id or ""),
+            pit_dome=pit_dome or "",
             batch=batch_code or "",
         )
     
@@ -340,7 +393,7 @@ class ProductionsCRUDSerializer(serializers.ModelSerializer):
         
         attrs["kode_batch"] = generated_kode_batch
  
-     # GET CONFIG MAX INCREMENT
+       # GET CONFIG MAX INCREMENT
         max_increment = ProductionsConfig.objects.filter(
             key="MAX_INCREMENT_PRODUCTION"
         ).values_list("value", flat=True).first() or 10

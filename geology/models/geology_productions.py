@@ -40,6 +40,7 @@ class OreProductions(BaseTenantModel):
     remarks             = models.TextField(default=None, null=True, blank=True)
     category            = models.CharField(max_length=10, default=None, null=True, blank=True)
     direct              = models.CharField(max_length=15, default='No', null=True, blank=True)
+    sample_type         = models.IntegerField(default=None, null=True, blank=True)
     no_production       = models.CharField(max_length=15,default=None, null=True, blank=True)
     user                = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 

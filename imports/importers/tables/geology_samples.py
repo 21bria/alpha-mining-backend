@@ -372,6 +372,7 @@ class SamplesImporter:
                     material=str(id_material or ""),
                     truck=item["truck"] or "",
                     point=str(sampling_point or ""),
+                    pit_dome=str(sample_number or ""),
                     batch=item["batch_code"] or "",
                 )
 

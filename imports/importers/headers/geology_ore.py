@@ -41,7 +41,8 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "pile_status",
         "remarks",
         "truck_factors",
-        "direct"
+        "direct",
+        "sample_type",
     ],
     aliases={
         "iup": "iup_code",
@@ -52,6 +53,7 @@ ORE_GEOLOGY_HEADERS = make_header_config(
         "dome_pit": "pit_dome",
         "dome_selective": "pit_dome",
         "dumping": "stockpile",
-        "dome": "pile_id"
+        "dome": "pile_id",
+        "sample_type": "type_sample",
     },
 )
