@@ -19,6 +19,8 @@ def apply_alias(headers: list[str], aliases: dict | None):
 
 
 def validate_headers(headers, required_headers=None, allowed_headers=None):
+    headers = [h for h in headers if h]
+
     header_set = set(headers)
 
     if required_headers:
