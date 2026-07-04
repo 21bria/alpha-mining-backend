@@ -7,6 +7,7 @@ class OreProductionsView(models.Model):
     category       = models.CharField(max_length=10, default=None, null=True, blank=True)
     shift          = models.CharField(max_length=10, default=None, null=True, blank=True)
     prospect_area  = models.CharField(max_length=50, default=None, null=True, blank=True)
+    pit_dome       = models.CharField(max_length=50, default=None, null=True, blank=True)
     mine_block     = models.CharField(max_length=10, default=None, null=True, blank=True)
     from_rl        = models.CharField(max_length=15, default=None, null=True, blank=True)
     to_rl          = models.CharField(max_length=15, default=None, null=True, blank=True)
