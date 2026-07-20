@@ -2,9 +2,18 @@ from decimal import Decimal
 
 from django.test import RequestFactory
 
-from analytics.views.management.get_production import get_summary_management
-from analytics.views.management.get_barging import get_barging_management
-from analytics.views.management.get_inventory import get_inventory_management
+from analytics.views.management.get_production import (
+    get_summary_management,
+)
+from analytics.views.management.get_barging import (
+    get_barging_management,
+)
+from analytics.views.management.get_inventory import (
+    get_inventory_management,
+)
+from analytics.views.management.get_manpower import (
+    get_manpower_management,
+)
 
 
 def d(value):
@@ -18,7 +27,23 @@ def safe_achievement(actual, plan):
     if plan <= 0:
         return Decimal("0")
 
-    return round((actual / plan) * 100, 2)
+    return round(
+        (actual / plan) * Decimal("100"),
+        2,
+    )
+
+
+def status_from_plan(actual, plan):
+    actual = d(actual)
+    plan = d(plan)
+
+    if plan <= 0:
+        return "STABLE" if actual <= 0 else "UP"
+
+    if actual >= plan:
+        return "UP"
+
+    return "DOWN"
 
 
 def pick_summary(data):
@@ -39,7 +64,9 @@ def json_response_to_dict(response):
     import json
 
     if hasattr(response, "content"):
-        return json.loads(response.content.decode("utf-8"))
+        return json.loads(
+            response.content.decode("utf-8")
+        )
 
     return response or {}
 
@@ -47,7 +74,9 @@ def json_response_to_dict(response):
 def call_view_as_dict(view_func, query):
     factory = RequestFactory()
     request = factory.get("/", data=query)
+
     response = view_func(request)
+
     return json_response_to_dict(response)
 
 
@@ -64,14 +93,19 @@ def build_live_query(
     query = {
         "iup_id": iup_id,
         "filter_type": period_type,
+
         "year": year,
         "yearly": year,
+
         "month": month,
         "monthly": month,
+
         "week": week,
         "weekly": week,
+
         "period_start": period_start,
         "period_end": period_end,
+
         "date_start": period_start,
         "date_end": period_end,
     }
@@ -83,30 +117,25 @@ def build_live_query(
     }
 
 
-def build_inventory_query(*, iup_id, period_end=None, period_start=None):
+def build_inventory_query(
+    *,
+    iup_id,
+    period_end=None,
+    period_start=None,
+):
     cut_date = period_end or period_start
+
+    query = {
+        "iup_id": iup_id,
+        "cut_date": cut_date,
+        "date": cut_date,
+    }
 
     return {
         key: value
-        for key, value in {
-            "iup_id": iup_id,
-            "cut_date": cut_date,
-            "date": cut_date,
-        }.items()
+        for key, value in query.items()
         if value not in [None, ""]
     }
-
-def status_from_plan(actual, plan):
-    actual = d(actual)
-    plan = d(plan)
-
-    if plan <= 0:
-        return "STABLE" if actual <= 0 else "UP"
-
-    if actual >= plan:
-        return "UP"
-
-    return "DOWN"
 
 
 def build_material_label(prefix, materials):
@@ -116,11 +145,13 @@ def build_material_label(prefix, materials):
     if prefix == "Waste":
         return f"Waste ({len(materials)} Materials)"
 
-    names = "+".join([
-        str(x.get("material", "")).strip()
-        for x in materials
-        if x.get("material")
-    ])
+    names = "+".join(
+        [
+            str(item.get("material", "")).strip()
+            for item in materials
+            if item.get("material")
+        ]
+    )
 
     return f"{prefix} ({names})" if names else prefix
 
@@ -136,12 +167,10 @@ def build_live_management_report(
     period_end=None,
 ):
     """
-    Live preview data untuk Management Report.
-    Dipakai kalau report belum ada atau period_type=range.
+    Build live preview untuk Management Report.
 
-    Catatan:
-    Ini sementara memanggil view function via RequestFactory.
-    Nanti lebih bagus dipecah jadi service/helper asli.
+    Production, barging, inventory, dan manpower
+    diambil dari sumber masing-masing.
     """
 
     period_type = (period_type or "range").lower()
@@ -162,45 +191,163 @@ def build_live_management_report(
         period_end=period_end,
     )
 
-    mining_data = call_view_as_dict(get_summary_management, query)
-    barging_data = call_view_as_dict(get_barging_management, query)
-    inventory_data = call_view_as_dict(get_inventory_management, inventory_query)
+    # -------------------------------------------------------------------------
+    # Load source data
+    # -------------------------------------------------------------------------
+
+    mining_data = call_view_as_dict(
+        get_summary_management,
+        query,
+    )
+
+    barging_data = call_view_as_dict(
+        get_barging_management,
+        query,
+    )
+
+    inventory_data = call_view_as_dict(
+        get_inventory_management,
+        inventory_query,
+    )
+
+    manpower_data = call_view_as_dict(
+        get_manpower_management,
+        query,
+    )
+
+    # -------------------------------------------------------------------------
+    # Summaries
+    # -------------------------------------------------------------------------
 
     mining_summary = pick_summary(mining_data)
     barging_summary = pick_summary(barging_data)
-    inventory_summary = inventory_data.get("summary") or {}
 
-    ore_materials = mining_summary.get("ore_materials") or []
-    non_ore_materials = mining_summary.get("non_ore_materials") or []
+    inventory_summary = (
+        inventory_data.get("summary")
+        or {}
+    )
 
-    ore_plan = d(mining_summary.get("total_ore_plan"))
-    ore_actual = d(mining_summary.get("total_ore"))
+    manpower_summary = (
+        manpower_data.get("summary")
+        or {}
+    )
 
-    waste_plan = d(mining_summary.get("total_non_ore_plan"))
-    waste_actual = d(mining_summary.get("total_non_ore"))
+    manpower_rows = (
+        manpower_data.get("rows")
+        or []
+    )
 
-    barging_plan = d(barging_summary.get("total_plan"))
-    barging_actual = d(barging_summary.get("total_barging"))
+    # -------------------------------------------------------------------------
+    # Mining values
+    # -------------------------------------------------------------------------
 
-    production_plan = ore_plan + waste_plan
-    production_actual = ore_actual + waste_actual
+    ore_materials = (
+        mining_summary.get("ore_materials")
+        or []
+    )
 
-    total_plan = production_plan + barging_plan
-    total_actual = production_actual + barging_actual
+    non_ore_materials = (
+        mining_summary.get("non_ore_materials")
+        or []
+    )
 
-    inventory_balance = d(inventory_summary.get("total_balance"))
-    avg_ni = d(inventory_summary.get("avg_ni"))
-    stockpile_count = int(inventory_summary.get("stockpile_count") or 0)
+    ore_plan = d(
+        mining_summary.get("total_ore_plan")
+    )
+
+    ore_actual = d(
+        mining_summary.get("total_ore")
+    )
+
+    waste_plan = d(
+        mining_summary.get("total_non_ore_plan")
+    )
+
+    waste_actual = d(
+        mining_summary.get("total_non_ore")
+    )
+
+    barging_plan = d(
+        barging_summary.get("total_plan")
+    )
+
+    barging_actual = d(
+        barging_summary.get("total_barging")
+    )
+
+    production_plan = (
+        ore_plan
+        + waste_plan
+    )
+
+    production_actual = (
+        ore_actual
+        + waste_actual
+    )
+
+    total_plan = (
+        production_plan
+        + barging_plan
+    )
+
+    total_actual = (
+        production_actual
+        + barging_actual
+    )
+
+    # -------------------------------------------------------------------------
+    # Inventory values
+    # -------------------------------------------------------------------------
+
+    inventory_balance = d(
+        inventory_summary.get("total_balance")
+    )
+
+    avg_ni = d(
+        inventory_summary.get("avg_ni")
+    )
+
+    stockpile_count = int(
+        inventory_summary.get("stockpile_count")
+        or 0
+    )
+
+    # -------------------------------------------------------------------------
+    # Manpower values
+    # -------------------------------------------------------------------------
+
+    site_pob = int(
+        manpower_summary.get("site_pob")
+        or 0
+    )
+
+    contractor_count = int(
+        manpower_summary.get("contractor_count")
+        or 0
+    )
+
+    # -------------------------------------------------------------------------
+    # Mining rows
+    # -------------------------------------------------------------------------
 
     mining_rows = [
         {
             "id": None,
-            "material": build_material_label("Ore", ore_materials),
+            "material": build_material_label(
+                "Ore",
+                ore_materials,
+            ),
             "group": "ORE",
             "plan": ore_plan,
             "actual": ore_actual,
-            "achievement": safe_achievement(ore_actual, ore_plan),
-            "status": status_from_plan(ore_actual, ore_plan),
+            "achievement": safe_achievement(
+                ore_actual,
+                ore_plan,
+            ),
+            "status": status_from_plan(
+                ore_actual,
+                ore_plan,
+            ),
             "is_total": False,
             "is_grand_total": False,
             "source_module": "LIVE",
@@ -208,12 +355,21 @@ def build_live_management_report(
         },
         {
             "id": None,
-            "material": build_material_label("Waste", non_ore_materials),
+            "material": build_material_label(
+                "Waste",
+                non_ore_materials,
+            ),
             "group": "WASTE",
             "plan": waste_plan,
             "actual": waste_actual,
-            "achievement": safe_achievement(waste_actual, waste_plan),
-            "status": status_from_plan(waste_actual, waste_plan),
+            "achievement": safe_achievement(
+                waste_actual,
+                waste_plan,
+            ),
+            "status": status_from_plan(
+                waste_actual,
+                waste_plan,
+            ),
             "is_total": False,
             "is_grand_total": False,
             "source_module": "LIVE",
@@ -225,8 +381,14 @@ def build_live_management_report(
             "group": "BARGING",
             "plan": barging_plan,
             "actual": barging_actual,
-            "achievement": safe_achievement(barging_actual, barging_plan),
-            "status": status_from_plan(barging_actual, barging_plan),
+            "achievement": safe_achievement(
+                barging_actual,
+                barging_plan,
+            ),
+            "status": status_from_plan(
+                barging_actual,
+                barging_plan,
+            ),
             "is_total": False,
             "is_grand_total": False,
             "source_module": "LIVE",
@@ -238,8 +400,14 @@ def build_live_management_report(
             "group": "TOTAL",
             "plan": production_plan,
             "actual": production_actual,
-            "achievement": safe_achievement(production_actual, production_plan),
-            "status": status_from_plan(production_actual, production_plan),
+            "achievement": safe_achievement(
+                production_actual,
+                production_plan,
+            ),
+            "status": status_from_plan(
+                production_actual,
+                production_plan,
+            ),
             "is_total": True,
             "is_grand_total": False,
             "source_module": "LIVE",
@@ -251,14 +419,24 @@ def build_live_management_report(
             "group": "TOTAL",
             "plan": total_plan,
             "actual": total_actual,
-            "achievement": safe_achievement(total_actual, total_plan),
-            "status": status_from_plan(total_actual, total_plan),
+            "achievement": safe_achievement(
+                total_actual,
+                total_plan,
+            ),
+            "status": status_from_plan(
+                total_actual,
+                total_plan,
+            ),
             "is_total": True,
             "is_grand_total": True,
             "source_module": "LIVE",
             "sort_order": 999,
         },
     ]
+
+    # -------------------------------------------------------------------------
+    # Metrics
+    # -------------------------------------------------------------------------
 
     metrics = [
         {
@@ -267,21 +445,42 @@ def build_live_management_report(
             "title": "Inventory",
             "value": inventory_balance,
             "suffix": "t",
-            "description": f"{stockpile_count} Stockpiles • Avg Ni {avg_ni}%",
+            "description": (
+                f"{stockpile_count} Stockpiles"
+                f" • Avg Ni {avg_ni}%"
+            ),
             "source_module": "LIVE",
             "sort_order": 1,
-        }
+        },
+        {
+            "id": None,
+            "section": "FLEET",
+            "title": "Site POB",
+            "value": site_pob,
+            "suffix": "",
+            "description": (
+                f"{contractor_count} Contractors"
+            ),
+            "source_module": "LIVE",
+            "sort_order": 2,
+        },
     ]
+
+    # -------------------------------------------------------------------------
+    # Response
+    # -------------------------------------------------------------------------
 
     return {
         "id": None,
         "iup": int(iup_id) if iup_id else None,
+
         "period_type": period_type,
         "year": int(year) if year else None,
         "month": int(month) if month else None,
         "week": int(week) if week else None,
         "period_start": period_start,
         "period_end": period_end,
+
         "status": "Live",
         "report_code": "LIVE-PREVIEW",
         "title": "Live Management Preview",
@@ -292,7 +491,7 @@ def build_live_management_report(
 
         "mining_rows": mining_rows,
         "metrics": metrics,
-        "manpower_rows": [],
+        "manpower_rows": manpower_rows,
         "documents": [],
 
         "hse_incidents": 0,
@@ -300,6 +499,7 @@ def build_live_management_report(
         "total_barging": barging_actual,
         "total_movement": total_actual,
         "total_inventory": inventory_balance,
+
         "avg_ni": avg_ni,
         "stockpile_count": stockpile_count,
     }

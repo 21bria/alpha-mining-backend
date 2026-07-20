@@ -68,6 +68,7 @@ class ManagementReportViewSet(MasterBaseViewSet):
         .prefetch_related(
             "mining_rows",
             "metrics",
+            "targets",
             "manpower_rows",
             "documents",
         )
@@ -170,11 +171,168 @@ class ManagementReportViewSet(MasterBaseViewSet):
 
         if report:
             serializer = self.get_serializer(report)
+            data = serializer.data
 
+            previous_report = (
+                ReportManagement.objects
+                .filter(
+                    iup=report.iup,
+                    period_type=report.period_type,
+                    year=report.year,
+                    week=report.week - 1,
+                    is_deleted=False,
+                )
+                .prefetch_related(
+                    "manpower_rows",
+                    "metrics",
+                )
+                .first()
+            )
+
+            # =====================================================
+            # Compare manpower
+            # =====================================================
+            previous_manpower_map = {}
+
+            if previous_report:
+                previous_manpower_map = {
+                    str(row.contractor or "").strip().upper(): row.personnel
+                    for row in previous_report.manpower_rows.all()
+                }
+
+            for row in data.get("manpower_rows", []):
+                contractor_key = str(
+                    row.get("contractor") or "",
+                ).strip().upper()
+
+                previous_raw = previous_manpower_map.get(contractor_key)
+                has_previous = previous_raw is not None
+
+                current = int(row.get("personnel") or 0)
+                previous = int(previous_raw or 0)
+                change = current - previous
+
+                row["previous_personnel"] = previous
+                row["change_value"] = change
+                row["change_percent"] = (
+                    round((change / previous) * 100, 2)
+                    if has_previous and previous != 0
+                    else 0
+                )
+
+                if not has_previous:
+                    row["status"] = "NEUTRAL"
+                    row["comparison_label"] = ""
+                elif change > 0:
+                    row["status"] = "UP"
+                    row["comparison_label"] = f"vs {previous:,}"
+                elif change < 0:
+                    row["status"] = "DOWN"
+                    row["comparison_label"] = f"vs {previous:,}"
+                else:
+                    row["status"] = "STABLE"
+                    row["comparison_label"] = f"vs {previous:,}"
+
+            # =====================================================
+            # Compare metrics
+            # =====================================================
+            previous_metric_map = {}
+
+            if previous_report:
+                previous_metric_map = {
+                    (
+                        str(metric.section or "").strip().upper(),
+                        str(metric.title or "").strip().upper(),
+                    ): metric.value
+                    for metric in previous_report.metrics.all()
+                }
+
+            # =====================================================
+            # Target Map
+            # =====================================================
+            target_map = {
+                str(target.code or "").strip().upper(): target
+                for target in report.targets.all()
+            }
+
+            for metric in data.get("metrics", []):
+                section = str(
+                    metric.get("section") or "",
+                ).strip().upper()
+
+                title = str(
+                    metric.get("title") or "",
+                ).strip().upper()
+
+                current = float(metric.get("value") or 0)
+
+                # =====================================================
+                # Target Comparison
+                # =====================================================
+                metric_code = str(
+                    metric.get("code") or "",
+                ).strip().upper()
+
+                target = target_map.get(metric_code)
+
+                if target:
+                    plan = float(target.plan or 0)
+
+                    metric["plan"] = plan
+                    metric["unit"] = target.unit
+                    metric["achievement"] = (
+                        round((current / plan) * 100, 2)
+                        if plan > 0 else 0
+                    )
+
+                # =====================================================
+                # HSE: 0 incident baik, >0 buruk
+                # =====================================================
+                if section == "HSE":
+                    metric["previous_value"] = 0
+                    metric["change_value"] = 0
+                    metric["change_percent"] = 0
+                    metric["status"] = "DOWN" if current > 0 else "UP"
+                    metric["comparison_label"] = ""
+                    continue
+
+                previous_raw = previous_metric_map.get((section, title))
+                has_previous = previous_raw is not None
+
+                previous = float(previous_raw or 0)
+                change = current - previous
+
+                metric["previous_value"] = round(previous, 2)
+                metric["change_value"] = round(change, 2)
+                metric["change_percent"] = (
+                    round((change / previous) * 100, 2)
+                    if has_previous and previous != 0
+                    else 0
+                )
+
+                if not has_previous:
+                    metric["status"] = "NEUTRAL"
+                    metric["comparison_label"] = ""
+                elif change > 0:
+                    metric["status"] = "UP"
+                    metric["comparison_label"] = (
+                        f"vs {previous:,.2f}".rstrip("0").rstrip(".")
+                    )
+                elif change < 0:
+                    metric["status"] = "DOWN"
+                    metric["comparison_label"] = (
+                        f"vs {previous:,.2f}".rstrip("0").rstrip(".")
+                    )
+                else:
+                    metric["status"] = "STABLE"
+                    metric["comparison_label"] = (
+                        f"vs {previous:,.2f}".rstrip("0").rstrip(".")
+                    )
+          
             return Response({
                 "mode": "report",
                 "status": report.status,
-                "data": serializer.data,
+                "data": data,
             })
 
         live_data = build_live_management_report(
@@ -201,6 +359,7 @@ class ReportManagementViewSet(MasterBaseViewSet):
         .prefetch_related(
             "mining_rows",
             "metrics",
+            "targets", 
             "manpower_rows",
             "documents",
         )

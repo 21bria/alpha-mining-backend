@@ -213,7 +213,11 @@ class ReportManagementMetric(models.Model):
         ("OTHER", "Other"),
     ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
 
     report = models.ForeignKey(
         ReportManagement,
@@ -221,12 +225,37 @@ class ReportManagementMetric(models.Model):
         related_name="metrics",
     )
 
-    section = models.CharField(max_length=50, choices=SECTION_CHOICES, default="SUMMARY")
+    code = models.CharField(
+        max_length=30,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+
+    section = models.CharField(
+        max_length=50,
+        choices=SECTION_CHOICES,
+        default="SUMMARY",
+    )
 
     title = models.CharField(max_length=100)
-    value = models.DecimalField(max_digits=18, decimal_places=2, default=0)
-    suffix = models.CharField(max_length=20, null=True, blank=True)
-    description = models.TextField(null=True, blank=True)
+
+    value = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+    )
+
+    suffix = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+    )
+
+    description = models.TextField(
+        blank=True,
+        default="",
+    )
 
     source_module = models.CharField(
         max_length=20,
@@ -238,13 +267,72 @@ class ReportManagementMetric(models.Model):
 
     class Meta:
         db_table = "report_management_metric"
+        ordering = ["sort_order", "title"]
         indexes = [
             models.Index(fields=["report", "section", "sort_order"]),
+            models.Index(fields=["report", "code"]),
             models.Index(fields=["section"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report", "code"],
+                condition=~models.Q(code=""),
+                name="unique_report_management_metric_code",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.code = str(self.code or "").strip().upper()
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.section} - {self.title}"
+        return f"{self.section} - {self.code or self.title}"
+    
+class ReportManagementTarget(BaseTenantModel):
+    report = models.ForeignKey(
+        ReportManagement,
+        on_delete=models.CASCADE,
+        related_name="targets",
+    )
+
+    code = models.CharField(
+        max_length=30,
+        db_index=True,
+    )
+
+    title = models.CharField(max_length=100)
+
+    plan = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+    )
+
+    unit = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+    )
+
+    class Meta:
+        db_table = "report_management_target"
+        ordering = ["code"]
+        indexes = [
+            models.Index(fields=["report", "code"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report", "code"],
+                name="unique_report_management_target_code",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.code = str(self.code or "").strip().upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.code} - {self.title}"
 
 class ReportManagementManpower(models.Model):
     DATA_SOURCE_CHOICES = [

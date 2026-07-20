@@ -9,6 +9,7 @@ from analytics.models_report_management import (
     ReportManagementMetric,
     ReportManagementManpower,
     ReportManagementDocument,
+    ReportManagementTarget,   # baru
 )
 
 class ReportManagementMiningSerializer(serializers.ModelSerializer):
@@ -34,6 +35,7 @@ class ReportManagementMetricSerializer(serializers.ModelSerializer):
         model = ReportManagementMetric
         fields = [
             "id",
+            "code",          # baru
             "section",
             "title",
             "value",
@@ -43,7 +45,23 @@ class ReportManagementMetricSerializer(serializers.ModelSerializer):
             "sort_order",
         ]
 
+    def validate_code(self, value):
+        return str(value or "").strip().upper()
 
+class ReportManagementTargetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReportManagementTarget
+        fields = [
+            "id",
+            "code",
+            "title",
+            "plan",
+            "unit",
+        ]
+
+    def validate_code(self, value):
+        return str(value or "").strip().upper()
+    
 class ReportManagementManpowerSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReportManagementManpower
@@ -126,6 +144,7 @@ class ReportManagementSerializer(serializers.ModelSerializer):
 
     mining_rows = ReportManagementMiningSerializer(many=True, required=False)
     metrics = ReportManagementMetricSerializer(many=True, required=False)
+    targets = ReportManagementTargetSerializer(many=True, required=False)
     manpower_rows = ReportManagementManpowerSerializer(many=True, required=False)
     documents = ReportManagementDocumentSerializer(many=True, required=False)
 
@@ -154,6 +173,7 @@ class ReportManagementSerializer(serializers.ModelSerializer):
             "username",
             "mining_rows",
             "metrics",
+            "targets", 
             "manpower_rows",
             "documents",
             "hse_incidents",
@@ -318,7 +338,7 @@ class ReportManagementSerializer(serializers.ModelSerializer):
     def to_internal_value(self, data):
         data = data.copy()
 
-        for key in ["mining_rows", "metrics", "manpower_rows", "documents"]:
+        for key in ["mining_rows", "metrics","targets", "manpower_rows", "documents"]:
             value = data.get(key)
 
             if isinstance(value, str):
@@ -403,12 +423,22 @@ class ReportManagementSerializer(serializers.ModelSerializer):
                     f"Report management untuk IUP ini, periode {period_key} sudah ada."
                 ]
             })
+        
+        title = str(attrs.get("title") or "").strip()
+
+        if title and not attrs.get("code"):
+            attrs["code"] = (
+                title.upper()
+                    .replace(" ", "_")
+                    .replace("-", "_")
+            )
 
         return attrs
 
     def _save_children(self, instance, child_data):
         mining_rows = child_data.get("mining_rows")
         metrics = child_data.get("metrics")
+        targets = child_data.get("targets")
         manpower_rows = child_data.get("manpower_rows")
         documents = child_data.get("documents")
 
@@ -423,11 +453,23 @@ class ReportManagementSerializer(serializers.ModelSerializer):
             ])
 
         if metrics is not None:
+            print("========== METRICS ==========")
+            for row in metrics:
+                print(row)
             instance.metrics.all().delete()
-
             ReportManagementMetric.objects.bulk_create([
                 ReportManagementMetric(report=instance, **row)
                 for row in metrics
+            ])
+
+        if targets is not None:
+            instance.targets.all().delete()
+            ReportManagementTarget.objects.bulk_create([
+                ReportManagementTarget(
+                    report=instance,
+                    **row,
+                )
+                for row in targets
             ])
 
         if manpower_rows is not None:
@@ -453,6 +495,7 @@ class ReportManagementSerializer(serializers.ModelSerializer):
         child_data = {
             "mining_rows": validated_data.pop("mining_rows", None),
             "metrics": validated_data.pop("metrics", None),
+             "targets": validated_data.pop("targets", None),
             "manpower_rows": validated_data.pop("manpower_rows", None),
             "documents": validated_data.pop("documents", None),
         }
@@ -483,6 +526,7 @@ class ReportManagementSerializer(serializers.ModelSerializer):
         child_data = {
             "mining_rows": validated_data.pop("mining_rows", None),
             "metrics": validated_data.pop("metrics", None),
+            "targets": validated_data.pop("targets", None),
             "manpower_rows": validated_data.pop("manpower_rows", None),
             "documents": validated_data.pop("documents", None),
         }
