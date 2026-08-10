@@ -9,7 +9,7 @@ class UnitsCategoriesLookupViewSet(BaseLookupViewSet):
     queryset = unitsCategories.objects.all().order_by("category")
 
     # search
-    search_fields = ["category__icontains", "description__icontains"]
+    search_fields = ["category__icontains"]
 
     # fleksibel keys
     allowed_value_keys = {"id", "category"}
